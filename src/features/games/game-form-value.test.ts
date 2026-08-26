@@ -95,19 +95,22 @@ describe("予約かどうかの判定", () => {
 
   it("4人そろっていて素点が全部空なら予約", () => {
     expect(
-      isReservationInput({ playedOn: "2026-08-26", memo: "", rows: four(["", "", "", ""]) }),
+      isReservationInput({ playedOn: "2026-08-26", memo: "", rows: four(["", "", "", ""]) }, 4),
     ).toBe(true);
   });
 
   it("メンバーが未選択なら予約にならない（誰が対局するかが目的なので）", () => {
     const rows = four(["", "", "", ""]);
     rows[0].memberId = 0;
-    expect(isReservationInput({ playedOn: "2026-08-26", memo: "", rows })).toBe(false);
+    expect(isReservationInput({ playedOn: "2026-08-26", memo: "", rows }, 4)).toBe(false);
   });
 
   it("素点が1つでも入っていれば予約ではない", () => {
     expect(
-      isReservationInput({ playedOn: "2026-08-26", memo: "", rows: four(["25000", "", "", ""]) }),
+      isReservationInput(
+        { playedOn: "2026-08-26", memo: "", rows: four(["25000", "", "", ""]) },
+        4,
+      ),
     ).toBe(false);
   });
 

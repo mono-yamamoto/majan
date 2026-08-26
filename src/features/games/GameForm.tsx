@@ -60,7 +60,7 @@ export function GameForm({
   // 「メンバーが未選択」と「素点が空」を分けて数える必要がある。
   // 前者は予約でも埋まっていないといけないが、後者は予約なら空のままでよい。
   const unselected = value.rows.filter((row) => row.memberId === 0).length;
-  const reservation = isReservationInput(value);
+  const reservation = isReservationInput(value, rule.uma.length);
   const partial = hasPartialScores(value);
   // 中身が数字かどうかは validateGameInput が RAW_SCORE_NOT_A_NUMBER として
   // 理由つきで返すので、ここで二重に判定しない（掟4）
@@ -100,7 +100,7 @@ export function GameForm({
         (sum, r) => sum + (r.rawScore !== null && Number.isFinite(r.rawScore) ? r.rawScore : 0),
         0,
       );
-  const expectedTotal = league.startPoint * 4;
+  const expectedTotal = league.startPoint * rule.uma.length;
   const shown = [...errors, ...(serverErrors ?? [])];
   // 未選択（0）は名前を出しようがないのでハイライトから外す
   const badMemberIds = new Set(shown.flatMap((e) => e.memberIds).filter((id) => id > 0));

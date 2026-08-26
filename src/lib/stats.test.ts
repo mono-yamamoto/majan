@@ -639,6 +639,31 @@ describe("computeStats / 予約（素点が全部 null）", () => {
     expect(computeStats(shuffled, ROSTER, RULE).scoredGameIds).toEqual([1, 2, 3, 4]);
   });
 
+  /**
+   * ★人数が足りない予約は「予約」ではない★
+   * isScorable が人数を見ているのに isReserved が見ないと、3行だけ全部 null の
+   * 半荘が「予定」として一覧に並び、警告も出ない。壊れているものを正常に見せる（原則5）。
+   */
+  it("3行だけ全部 null の半荘は予約ではなく broken", () => {
+    const short: StatsGame = {
+      id: 95,
+      playedOn: "2026-09-14",
+      results: [1, 6, 2].map((memberId) => ({ memberId, rawScore: null })),
+    };
+    const { broken, reservedGameIds } = computeStats([GAMES[0], short], ROSTER, RULE);
+    expect(broken).toEqual([95]);
+    expect(reservedGameIds).toEqual([]);
+  });
+
+  it("5行全部 null も予約ではなく broken", () => {
+    const long: StatsGame = {
+      id: 96,
+      playedOn: "2026-09-15",
+      results: [1, 6, 2, 7, 3].map((memberId) => ({ memberId, rawScore: null })),
+    };
+    expect(computeStats([GAMES[0], long], ROSTER, RULE).broken).toEqual([96]);
+  });
+
   it("予約を渡しても scoreGame が呼ばれず例外にならない", () => {
     expect(() => computeStats([reservation(90, "2026-09-10")], ROSTER, RULE)).not.toThrow();
   });

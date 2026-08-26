@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { deleteGame, updateGame } from "@/lib/api";
+import { isScorable } from "@/lib/stats";
 import { describeFailure, useLeague } from "@/lib/league-context";
 import type { GameInput } from "@/lib/types";
 import { useWriteAction } from "@/lib/use-write-action";
@@ -18,7 +19,7 @@ import { GameForm } from "./GameForm";
 import { valueFromGame, type GameFormValue } from "./game-form-value";
 
 export function EditGamePage() {
-  const { games, reload } = useLeague();
+  const { games, league, reload } = useLeague();
   const { leagueId, gameId } = useParams();
   const navigate = useNavigate();
 
@@ -31,6 +32,10 @@ export function EditGamePage() {
     game === undefined ? null : valueFromGame(game),
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // 確定 → 予約に戻す操作は入力済みの素点を失う。削除と同じく確認を挟む。
+  // 「予約 → 確定」は不可逆ではないが、「確定 → 予約」は入力した素点が消えて
+  // 復元は入力し直しになる。削除に確認があってこちらに無いのは説明できない。
+  const [revertInput, setRevertInput] = useState<GameInput | null>(null);
 
   const listPath = `/leagues/${leagueId}/games`;
 
@@ -46,6 +51,11 @@ export function EditGamePage() {
 
   const write = useWriteAction(updateAction, backToList);
   const remove = useWriteAction(deleteAction, backToList);
+
+  const rule = { startPoint: league.startPoint, returnPoint: league.returnPoint, uma: league.uma };
+  /** 読み込み時に確定していた半荘を、予約（素点が全部空）に戻そうとしているか */
+  const isRevertingToReservation = (input: GameInput) =>
+    game !== undefined && isScorable(game, rule) && input.results.every((r) => r.rawScore === null);
 
   if (game === undefined || value === null) {
     return (
@@ -70,7 +80,13 @@ export function EditGamePage() {
         <GameForm
           value={value}
           onChange={setValue}
-          onSubmit={write.run}
+          onSubmit={(input) => {
+            if (isRevertingToReservation(input)) {
+              setRevertInput(input);
+              return;
+            }
+            write.run(input);
+          }}
           submitLabel="更新"
           pending={active}
           serverErrors={write.failure?.kind === "validation" ? write.failure.errors : undefined}
@@ -93,6 +109,35 @@ export function EditGamePage() {
       >
         この半荘を削除
       </Button>
+
+      <Dialog open={revertInput !== null} onOpenChange={(open) => !open && setRevertInput(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>入力済みの素点を消しますか</DialogTitle>
+            <DialogDescription>
+              この半荘を「予定」に戻します。入力済みの素点は消え、pt・順位も戦績から外れます。
+              戻すには素点を入力し直す必要があります。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4">
+            <Button type="button" variant="ghost" onClick={() => setRevertInput(null)}>
+              やめる
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={active}
+              onClick={() => {
+                const input = revertInput;
+                setRevertInput(null);
+                if (input !== null) write.run(input);
+              }}
+            >
+              予定に戻す
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>

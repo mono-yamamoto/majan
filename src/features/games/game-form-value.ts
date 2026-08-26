@@ -69,10 +69,10 @@ export function toGameInput(value: GameFormValue): GameInput {
   };
 }
 
-/** 4人そろっていて素点が1つも入っていない = 予約として登録できる状態 */
-export function isReservationInput(value: GameFormValue): boolean {
+/** 人数がそろっていて素点が1つも入っていない = 予約として登録できる状態 */
+export function isReservationInput(value: GameFormValue, playersPerGame: number): boolean {
   return (
-    value.rows.length === 4 &&
+    value.rows.length === playersPerGame &&
     value.rows.every((row) => row.memberId > 0 && row.rawScore.trim() === "")
   );
 }

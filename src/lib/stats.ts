@@ -103,8 +103,14 @@ const DECI_PER_PT = 10;
  * 予約か。素点が1つも入っていない＝「次に誰が対局するか」だけ決まった状態。
  * **正常な状態**なので、集計から外すが警告は出さない（broken とは違う）。
  */
-export function isReserved(game: { results: { rawScore: number | null }[] }): boolean {
-  return game.results.length > 0 && game.results.every((r) => r.rawScore === null);
+export function isReserved(
+  game: { results: { rawScore: number | null }[] },
+  rule: LeagueRule,
+): boolean {
+  // 人数も見る。isScorable が人数を見ているのに isReserved が見ないと、
+  // 3行だけ全部 null の半荘が「予約」として一覧の「予定」に並び、警告も出ない。
+  // 壊れているものを正常に見せることになる（原則5）。
+  return game.results.length === rule.uma.length && game.results.every((r) => r.rawScore === null);
 }
 
 /**
@@ -194,7 +200,7 @@ export function computeStats(
     .filter((g) => {
       // 予約は集計に入れないが broken には入れない。broken は「運営が直すべき異常」で、
       // **予約は正常な状態**。混ぜると画面が「壊れています」と嘘をつく（原則5）。
-      if (isReserved(g)) {
+      if (isReserved(g, rule)) {
         reserved.push(g.id);
         return false;
       }

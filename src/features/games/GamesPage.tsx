@@ -7,7 +7,7 @@ import { isReserved, isScorable } from "@/lib/stats";
 type Game = ReturnType<typeof useLeague>["games"][number];
 
 export function GamesPage() {
-  const { games, members, league } = useLeague();
+  const { games, members, league, roster } = useLeague();
   const { leagueId } = useParams();
   const base = `/leagues/${leagueId}`;
 
@@ -21,22 +21,22 @@ export function GamesPage() {
   const reservations = useMemo(
     () =>
       games
-        .filter(isReserved)
+        .filter((g) => isReserved(g, rule))
         .sort((a, b) =>
           a.playedOn === b.playedOn ? a.id - b.id : a.playedOn < b.playedOn ? -1 : 1,
         ),
-    [games],
+    [games, rule],
   );
 
   // 確定済みは新しい半荘ほど上（入力直後の確認と、直近の修正が主な用途）
   const finished = useMemo(
     () =>
       games
-        .filter((g) => !isReserved(g))
+        .filter((g) => !isReserved(g, rule))
         .sort((a, b) =>
           a.playedOn === b.playedOn ? b.id - a.id : a.playedOn < b.playedOn ? 1 : -1,
         ),
-    [games],
+    [games, rule],
   );
 
   const editLink = (game: Game) => (
@@ -76,9 +76,19 @@ export function GamesPage() {
                 {game.memo === null ? null : (
                   <p className="text-muted-foreground mt-1 text-sm">{game.memo}</p>
                 )}
-                {/* 予約は pt・順位を持たないので、4人の名前と日付だけ */}
+                {/* 予約は pt・順位を持たないので、名前と日付だけ。
+                    チーム順に並べると「2-2 になっている」が読める。
+                    member_id 順のままだと id の並び次第で A,B,A,B にもなり、
+                    予約の情報量のほぼ全部であるチーム構成が読み取れない */}
                 <p className="mt-2 text-sm">
-                  {game.results.map((r) => nameOf(r.memberId)).join("・")}
+                  {[...game.results]
+                    .sort(
+                      (a, b) =>
+                        (roster.get(a.memberId) ?? 0) - (roster.get(b.memberId) ?? 0) ||
+                        a.memberId - b.memberId,
+                    )
+                    .map((r) => nameOf(r.memberId))
+                    .join("・")}
                 </p>
                 <p className="text-muted-foreground mt-1 text-xs">
                   素点は未入力（編集して入れると確定します）
