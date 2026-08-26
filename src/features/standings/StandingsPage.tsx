@@ -1,8 +1,8 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useLeague } from "@/lib/league-context";
 import { computeStats, rankMembers, type CumulativePoint } from "@/lib/stats";
-import type { ChartSeries } from "./CumulativeChart";
+import type { ChartAxis, ChartSeries } from "./chart-rows";
 
 /**
  * Recharts は gzip で約 105 kB あるので、この画面を開いたときにだけ読み込む（D-26）。
@@ -28,8 +28,29 @@ export function StandingsPage() {
   const stats = useMemo(() => computeStats(games, roster, rule), [games, roster, rule]);
   const ranked = useMemo(() => rankMembers(stats.members), [stats.members]);
 
-  const nameOf = (id: number) => members.find((m) => m.id === id)?.name ?? `#${id}`;
-  const teamNameOf = (id: number) => teams.find((t) => t.id === id)?.name ?? `#${id}`;
+  /** 同点は同じ順位番号（6,6,6,9）。deci 整数で比べる（float の 1e-14 差で分けない） */
+  const displayRank = useMemo(() => {
+    const out: number[] = [];
+    ranked.forEach((m, i) => {
+      const prev = ranked[i - 1];
+      const same =
+        prev !== undefined &&
+        prev.gameCount > 0 &&
+        m.gameCount > 0 &&
+        Math.round(prev.totalPt * 10) === Math.round(m.totalPt * 10);
+      out.push(same ? (out[i - 1] as number) : i + 1);
+    });
+    return out;
+  }, [ranked]);
+
+  const nameOf = useCallback(
+    (id: number) => members.find((m) => m.id === id)?.name ?? `#${id}`,
+    [members],
+  );
+  const teamNameOf = useCallback(
+    (id: number) => teams.find((t) => t.id === id)?.name ?? `#${id}`,
+    [teams],
+  );
 
   /**
    * 半荘の通し番号を x 軸にする（日付だけだと同じ日の複数半荘が重なる）。
@@ -43,14 +64,17 @@ export function StandingsPage() {
     );
   }, [games, stats.scoredGameIds]);
 
-  const toSeries = (id: number, name: string, cumulative: CumulativePoint[]): ChartSeries => ({
-    id,
-    name,
-    points: cumulative.flatMap((c) => {
-      const at = gameOrder.get(c.gameId);
-      return at === undefined ? [] : [{ x: at.x, label: at.label, totalPt: c.totalPt }];
+  const toSeries = useCallback(
+    (id: number, name: string, cumulative: CumulativePoint[]): ChartSeries => ({
+      id,
+      name,
+      points: cumulative.flatMap((c) => {
+        const at = gameOrder.get(c.gameId);
+        return at === undefined ? [] : [{ x: at.x, totalPt: c.totalPt }];
+      }),
     }),
-  });
+    [gameOrder],
+  );
 
   const series = useMemo(
     () =>
@@ -59,11 +83,15 @@ export function StandingsPage() {
         : ranked
             .filter((m) => m.gameCount > 0)
             .map((m) => toSeries(m.memberId, nameOf(m.memberId), m.cumulative)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mode, stats.teams, ranked, gameOrder],
+    [mode, stats.teams, ranked, toSeries, teamNameOf, nameOf],
   );
 
   const playedCount = stats.scoredGameIds.length;
+  /** x 軸は採点した全半荘。系列が点を持たない半荘でも軸は欠けない */
+  const axis: ChartAxis = useMemo(
+    () => [...gameOrder.values()].sort((a, b) => a.x - b.x),
+    [gameOrder],
+  );
 
   return (
     <section>
@@ -121,6 +149,10 @@ export function StandingsPage() {
           </ul>
 
           <h3 className="mt-6 font-bold">個人ランキング</h3>
+          {/* 同点は同じ順位番号にする（6,6,6,9 の形）。
+              このアプリは同点をウマ折半・占める順位で扱う思想なので、
+              ランキングだけ入力順で番号が分かれるのは一貫しない。
+              rankMembers が同値を memberId で安定させているので、表示側で数えられる */}
           <ol className="mt-2 space-y-1">
             {ranked.map((m, i) => (
               <li
@@ -128,7 +160,7 @@ export function StandingsPage() {
                 className="border-border flex items-baseline gap-2 border-b py-2 text-sm"
               >
                 <span className="text-muted-foreground w-5 tabular-nums">
-                  {m.gameCount === 0 ? "–" : i + 1}
+                  {m.gameCount === 0 ? "–" : displayRank[i]}
                 </span>
                 <Link
                   to={`/leagues/${leagueId}/members/${m.memberId}`}
@@ -166,7 +198,7 @@ export function StandingsPage() {
           <Suspense
             fallback={<p className="text-muted-foreground mt-4 text-sm">グラフを読み込み中…</p>}
           >
-            <CumulativeChart series={series} />
+            <CumulativeChart series={series} axis={axis} />
           </Suspense>
         </>
       )}
