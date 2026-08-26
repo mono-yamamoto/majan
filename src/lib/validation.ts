@@ -24,6 +24,8 @@ export type ValidationErrorCode =
   | "RESULT_COUNT"
   /** 同じメンバーが複数回 */
   | "DUPLICATE_MEMBER"
+  /** memberId が安全整数の正の値でない */
+  | "MEMBER_ID_RANGE"
   /** そのリーグに所属していないメンバーがいる */
   | "NOT_IN_LEAGUE"
   /** 各チーム2人ずつになっていない */
@@ -32,6 +34,8 @@ export type ValidationErrorCode =
   | "RAW_SCORE_TOTAL"
   /** 素点が100の倍数でない */
   | "RAW_SCORE_UNIT"
+  /** 素点が安全整数でない（2^53 を超えると % 100 の判定が嘘になる） */
+  | "RAW_SCORE_RANGE"
   /** played_on が YYYY-MM-DD の実在日付でない */
   | "INVALID_DATE"
   /** memo が長すぎる */
@@ -92,8 +96,8 @@ export function isValidPlayedOn(value: string): boolean {
  * 半荘の入力を検証し、**見つかったエラーを全部**返す（最初の1件で打ち切らない）。
  * 問題がなければ空配列。
  *
- * 返る順序は features.mdx のバリデーション表の順（件数 → 重複 → 所属 → 2-2 →
- * 合計 → 単位 → メモ → 日付）で固定する。
+ * 返る順序は features.mdx のバリデーション表の順（件数 → 重複 → メンバーIDの範囲 →
+ * 所属 → 2-2 → 合計 → 単位 → 素点の範囲 → 日付 → メモ）で固定する。
  *
  * ★原因帰属の設計★
  * 「2-2 固定」は、件数が4人で・重複がなく・4人とも名簿から引けたときだけ判定する。
@@ -144,8 +148,26 @@ export function validateGameInput(
     });
   }
 
-  // 3. リーグ所属
-  const notInLeague = results.filter((r) => !roster.has(r.memberId)).map((r) => r.memberId);
+  // 3. メンバーIDの範囲
+  const badMemberIds = results
+    .filter((r) => !Number.isSafeInteger(r.memberId) || r.memberId <= 0)
+    .map((r) => r.memberId);
+  const hasBadMemberId = badMemberIds.length > 0;
+  if (hasBadMemberId) {
+    errors.push({
+      code: "MEMBER_ID_RANGE",
+      field: "results",
+      memberIds: [...new Set(badMemberIds)],
+      message: "メンバーの指定が不正です",
+    });
+  }
+
+  // 4. リーグ所属
+  // ID そのものが不正な人は 3. で報告済みなので、ここでは重ねて数えない
+  // （「所属していない」は真だが、本当の原因は ID が壊れていることなので）
+  const notInLeague = results
+    .filter((r) => Number.isSafeInteger(r.memberId) && r.memberId > 0 && !roster.has(r.memberId))
+    .map((r) => r.memberId);
   const hasUnknownMember = notInLeague.length > 0;
   if (hasUnknownMember) {
     errors.push({
@@ -156,8 +178,8 @@ export function validateGameInput(
     });
   }
 
-  // 4. 2-2固定（件数・重複・所属がそろって初めて意味を持つ）
-  if (hasExactCount && !hasDuplicate && !hasUnknownMember) {
+  // 5. 2-2固定（件数・重複・ID の妥当性・所属がそろって初めて意味を持つ）
+  if (hasExactCount && !hasDuplicate && !hasBadMemberId && !hasUnknownMember) {
     const perTeam = new Map<number, number>();
     for (const r of results) {
       const teamId = roster.get(r.memberId) as number;
@@ -174,8 +196,22 @@ export function validateGameInput(
     }
   }
 
-  // 5. 素点合計（4人ぶんそろっていないと意味がない）
-  if (hasExactCount) {
+  // 素点が「整数として正確に表せる範囲」を外れていると、合計も
+  // 「100の倍数か」も判定が嘘になる。どちらの検査も先に範囲を確かめてから行う（→ 8.）。
+  //
+  // 小数（42300.5）はここに含めない。安全整数ではないが、原因は桁の大きさではなく
+  // 入力単位なので「素点の値が大きすぎます」は誤解を招く。% 100 が 0 にならないので
+  // 7. の RAW_SCORE_UNIT が拾う（x % 100 === 0 を満たす有限の非整数は存在しない）。
+  const outOfRange = results.filter(
+    (r) =>
+      !Number.isFinite(r.rawScore) ||
+      (Number.isInteger(r.rawScore) && !Number.isSafeInteger(r.rawScore)),
+  );
+  const hasOutOfRange = outOfRange.length > 0;
+  const outOfRangeSet = new Set(outOfRange);
+
+  // 6. 素点合計（4人ぶんそろっていないと意味がない）
+  if (hasExactCount && !hasOutOfRange) {
     const expected = rule.startPoint * playersPerGame;
     const actual = results.reduce((sum, r) => sum + r.rawScore, 0);
     if (actual !== expected) {
@@ -188,9 +224,11 @@ export function validateGameInput(
     }
   }
 
-  // 6. 素点の単位（7. 箱下は負数を弾かないことで満たす）
+  // 7. 素点の単位（箱下は負数を弾かないことで満たす）
+  // 桁が範囲外の素点は 8. で報告するので、ここでは見ない。
+  // 1e19 は % 100 === 0 が成立してしまうため「100点単位です」と言うと誤解を招く
   const badUnit = results
-    .filter((r) => !Number.isFinite(r.rawScore) || r.rawScore % 100 !== 0)
+    .filter((r) => !outOfRangeSet.has(r) && r.rawScore % 100 !== 0)
     .map((r) => r.memberId);
   if (badUnit.length > 0) {
     errors.push({
@@ -201,13 +239,13 @@ export function validateGameInput(
     });
   }
 
-  // 8. memo の長さ
-  if (input.memo !== null && input.memo.length > MEMO_MAX_LENGTH) {
+  // 8. 素点の範囲
+  if (hasOutOfRange) {
     errors.push({
-      code: "MEMO_TOO_LONG",
-      field: "memo",
-      memberIds: [],
-      message: `メモは${MEMO_MAX_LENGTH}文字以内で入力してください（現在 ${input.memo.length}文字）`,
+      code: "RAW_SCORE_RANGE",
+      field: "results",
+      memberIds: [...new Set(outOfRange.map((r) => r.memberId))],
+      message: "素点の値が大きすぎます（正確に扱える範囲を超えています）",
     });
   }
 
@@ -218,6 +256,16 @@ export function validateGameInput(
       field: "playedOn",
       memberIds: [],
       message: "日付は YYYY-MM-DD 形式の実在する日付で入力してください",
+    });
+  }
+
+  // 10. memo の長さ
+  if (input.memo !== null && input.memo.length > MEMO_MAX_LENGTH) {
+    errors.push({
+      code: "MEMO_TOO_LONG",
+      field: "memo",
+      memberIds: [],
+      message: `メモは${MEMO_MAX_LENGTH}文字以内で入力してください（現在 ${input.memo.length}文字）`,
     });
   }
 

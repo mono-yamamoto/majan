@@ -105,7 +105,7 @@ describe("validateGameInput / 1. 件数", () => {
   });
 });
 
-describe("validateGameInput / 2 と 4 は独立に必要", () => {
+describe("validateGameInput / 重複チェックと 2-2 は独立に必要", () => {
   /**
    * ★重複チェックを 2-2 で代用できないことの証明★
    * A(team1), A(team1), B(team2), C(team2) は team1:2 / team2:2 で 2-2 を通過し、
@@ -171,7 +171,7 @@ describe("validateGameInput / 2 と 4 は独立に必要", () => {
   });
 });
 
-describe("validateGameInput / 3. リーグ所属と、エラーの原因帰属", () => {
+describe("validateGameInput / 4. リーグ所属と、エラーの原因帰属", () => {
   it("名簿から引けないメンバーは NOT_IN_LEAGUE で、誰かを特定できる", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
@@ -222,7 +222,7 @@ describe("validateGameInput / 3. リーグ所属と、エラーの原因帰属",
   });
 });
 
-describe("validateGameInput / 5. 素点合計・6. 素点の単位", () => {
+describe("validateGameInput / 6. 素点合計・7. 素点の単位", () => {
   it("合計が startPoint x 4 でなければ RAW_SCORE_TOTAL", () => {
     const input = validInput();
     input.results[0].rawScore = 42400; // 合計 +100
@@ -312,7 +312,7 @@ const SQL_ORACLE: [string, boolean][] = [
   ["2026-08-26T00:00:00Z", false],
 ];
 
-describe("validateGameInput / 8. 日付", () => {
+describe("validateGameInput / 9. 日付", () => {
   it.each(SQL_ORACLE)("SQL の CHECK と一致する: %j → %s", (value, expected) => {
     expect(isValidPlayedOn(value)).toBe(expected);
   });
@@ -342,7 +342,101 @@ describe("validateGameInput / 8. 日付", () => {
   });
 });
 
-describe("validateGameInput / 9. memo の長さ", () => {
+describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", () => {
+  /**
+   * ★ゼロサムを守るために必要なチェック★
+   * 1e19 % 100 === 0 が成立してしまうので「100の倍数」判定だけでは素通りする。
+   * IEEE754 の倍精度では 2^53 を超えると整数が飛び飛びになり、判定自体が意味を失う。
+   * 実測: [1e19, -1e19, 50000, 50000] は合計も浮動小数で 100000 になるため
+   * 旧実装では errors: [] を返し、scoreGame の pt 合計が -3.2 になっていた。
+   */
+  it("安全整数を超える素点は RAW_SCORE_RANGE で弾く（合計も 100 の倍数も素通りする組）", () => {
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: 1, rawScore: 1e19 },
+        { memberId: 6, rawScore: -1e19 },
+        { memberId: 2, rawScore: 50000 },
+        { memberId: 7, rawScore: 50000 },
+      ],
+    };
+    // 旧実装が素通りしていた前提条件を、テスト自身が明示しておく
+    expect(1e19 % 100).toBe(0);
+    expect(1e19 + -1e19 + 50000 + 50000).toBe(RULE.startPoint * 4);
+
+    const errors = validateGameInput(input, RULE, ROSTER);
+    expect(codesOf(errors)).toEqual(["RAW_SCORE_RANGE"]);
+    expect(find(errors, "RAW_SCORE_RANGE")?.memberIds).toEqual([1, 6]);
+  });
+
+  it("範囲外の素点があるとき RAW_SCORE_UNIT と RAW_SCORE_TOTAL を出さない（誤解を招くため）", () => {
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: 1, rawScore: 1e19 },
+        { memberId: 6, rawScore: 25000 },
+        { memberId: 2, rawScore: 25000 },
+        { memberId: 7, rawScore: 25000 },
+      ],
+    };
+    const codes = codesOf(validateGameInput(input, RULE, ROSTER));
+    expect(codes).toEqual(["RAW_SCORE_RANGE"]);
+    // 1e19 は % 100 === 0 なので「100点単位で」は誤解を招くし、合計も信用できない
+    expect(codes).not.toContain("RAW_SCORE_UNIT");
+    expect(codes).not.toContain("RAW_SCORE_TOTAL");
+  });
+
+  it("安全整数の範囲内なら桁が大きくてもゼロサムは保たれるので弾かない", () => {
+    const big = 9e15; // Number.MAX_SAFE_INTEGER (9007199254740991) 未満
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: 1, rawScore: big },
+        { memberId: 6, rawScore: -big },
+        { memberId: 2, rawScore: 50000 },
+        { memberId: 7, rawScore: 50000 },
+      ],
+    };
+    expect(Number.isSafeInteger(big)).toBe(true);
+    expect(validateGameInput(input, RULE, ROSTER)).toEqual([]);
+  });
+
+  it("非整数の素点は RAW_SCORE_RANGE ではなく RAW_SCORE_UNIT で弾く", () => {
+    const input = validInput();
+    input.results[0].rawScore = 42300.5;
+    const codes = codesOf(validateGameInput(input, RULE, ROSTER));
+    expect(codes).toContain("RAW_SCORE_UNIT");
+    expect(codes).not.toContain("RAW_SCORE_RANGE");
+  });
+
+  it.each([
+    ["0", 0],
+    ["負の値", -1],
+    ["非整数", 1.5],
+    ["安全整数を超える値", 1e19],
+  ])("memberId が %s なら MEMBER_ID_RANGE", (_label, memberId) => {
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: memberId as number, rawScore: 25000 },
+        { memberId: 6, rawScore: 25000 },
+        { memberId: 2, rawScore: 25000 },
+        { memberId: 7, rawScore: 25000 },
+      ],
+    };
+    const codes = codesOf(validateGameInput(input, RULE, ROSTER));
+    expect(codes).toContain("MEMBER_ID_RANGE");
+    // ID が壊れている人を「所属していない」「2-2 でない」と重ねて報告しない
+    expect(codes).not.toContain("NOT_IN_LEAGUE");
+    expect(codes).not.toContain("TEAM_BALANCE");
+  });
+});
+
+describe("validateGameInput / 10. memo の長さ", () => {
   const withMemo = (memo: string | null): GameInput => ({ ...validInput(), memo });
 
   it("memo が null なら通る", () => {
@@ -408,8 +502,8 @@ describe("validateGameInput / エラーは全部返す", () => {
       "DUPLICATE_MEMBER",
       "NOT_IN_LEAGUE",
       "RAW_SCORE_UNIT",
-      "MEMO_TOO_LONG",
       "INVALID_DATE",
+      "MEMO_TOO_LONG",
     ]);
   });
 });
