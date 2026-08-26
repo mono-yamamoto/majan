@@ -173,6 +173,10 @@ export function computeStats(
 
     for (const s of scored) {
       const a = ensure(s.memberId);
+      // float 領域 → 整数 deci 領域への境界変換。
+      // scoreGame の出力（整数deci / 10）に対しては no-op だが、変換の正しさを
+      // 「JS の float で (d/10)*10 が往復する」という経験的性質に依存させないために置く。
+      // pt が JSON 経由で来る・scoring.ts が表現を変える、といった変更で静かに壊れるのを防ぐ。
       const ptDeci = Math.round(s.pt * DECI_PER_PT);
 
       a.gameCount += 1;

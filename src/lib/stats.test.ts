@@ -252,6 +252,86 @@ describe("computeStats / 同点1位は全員1着", () => {
   });
 });
 
+/**
+ * stats が `Math.round(pt * 10)` で pt を deci 整数に戻せるのは、
+ * 「scoreGame の出力が厳密に 整数/10 である」ことに依存している。
+ * その前提自体をここで固定する（前提が壊れたら stats の集計も壊れる）。
+ */
+describe("stats が依存する scoring 側の前提", () => {
+  it("scoreGame の pt は常に厳密に「整数/10」で表せる", () => {
+    const rules: LeagueRule[] = [
+      { startPoint: 25000, returnPoint: 30000, uma: [30, 10, -10, -30] },
+      { startPoint: 25000, returnPoint: 27500, uma: [30, 10, -10, -30] },
+      { startPoint: 25000, returnPoint: 25000, uma: [10, 5, -5, -10] },
+    ];
+    let checked = 0;
+    const violations: { rawScores: number[]; pt: number }[] = [];
+
+    for (const rule of rules) {
+      for (let a = -20000; a <= 80000; a += 2000) {
+        for (let b = -20000; b <= 80000; b += 2000) {
+          const c = rule.startPoint;
+          const d = rule.startPoint * 4 - a - b - c;
+          if (d < -20000 || d > 80000) continue;
+          const rawScores = [a, b, c, d];
+          for (const sc of scoreGame(
+            rawScores.map((rawScore, i) => ({ memberId: i + 1, rawScore })),
+            rule,
+          )) {
+            checked++;
+            if (Math.round(sc.pt * 10) / 10 !== sc.pt && violations.length < 5) {
+              violations.push({ rawScores, pt: sc.pt });
+            }
+          }
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+    expect(checked).toBeGreaterThan(10000);
+  });
+
+  /**
+   * pt を deci に戻す往復（n → n/10 → *10）が厳密に元に戻る範囲の話。
+   * 実測では |n| が 6e15 あたりから壊れ始めるが、素点は validation が
+   * 安全整数までしか許さないので |ptDeci| は高々 9.0e13 程度。約67倍の余裕がある。
+   */
+  it("到達しうる ptDeci の範囲では n → n/10 → *10 が厳密に元に戻る", () => {
+    const maxReachable = Math.round(Number.MAX_SAFE_INTEGER / 100) + 500;
+    expect(maxReachable).toBeLessThan(1e14);
+
+    const samples = [
+      0,
+      1,
+      -1,
+      167,
+      -500,
+      623,
+      100000,
+      -100000,
+      maxReachable,
+      -maxReachable,
+      Math.floor(maxReachable / 3),
+      Math.floor(maxReachable / 7) * -1,
+    ];
+    for (const n of samples) {
+      expect((n / 10) * 10).toBe(n);
+      expect(Math.round((n / 10) * 10)).toBe(n);
+    }
+
+    // 壊れ始める領域が到達範囲より十分上にあること（前提が薄氷でないことの確認）
+    expect((6000000000000007 / 10) * 10).not.toBe(6000000000000007);
+  });
+});
+
+/**
+ * 注: `Math.round(pt * DECI_PER_PT)` から `round` を外す変異は**等価変異**で、
+ * どんな入力でも結果が変わらない（scoreGame の出力に対しては no-op のため）。
+ * mutation check で検出できないのはテストの欠陥ではなく変異の性質。
+ * 「検出できない＝テストが弱い」と読まないこと。
+ * 実際に効いているのは「pt を float のまま累積しない」という構造の方で、
+ * それは下の2本が捕まえる。
+ */
 describe("computeStats / deci 整数で集計する", () => {
   it("同じ pt を10回足しても誤差が出ない（float の reduce なら壊れる）", () => {
     // 3人トップ同点（pt = 16.7）の半荘を10回
