@@ -62,9 +62,16 @@ export function GameForm({
   const unselected = value.rows.filter((row) => row.memberId === 0).length;
   const reservation = isReservationInput(value, rule.uma.length);
   const partial = hasPartialScores(value);
+  // まだ埋まっていないもの。「あと N 人」だけを出すと、タイトルが空のときに
+  // 「人を選べば保存できる」という嘘になる（原則5）。足りないものを全部並べる。
+  // タイトルは予約でも必須（validateGameInput の TITLE_REQUIRED と同じ条件）。
+  const missing = [
+    ...(value.title.trim() === "" ? ["タイトル"] : []),
+    ...(unselected > 0 ? [`あと${unselected}人のメンバー`] : []),
+  ];
   // 中身が数字かどうかは validateGameInput が RAW_SCORE_NOT_A_NUMBER として
   // 理由つきで返すので、ここで二重に判定しない（掟4）
-  const complete = unselected === 0 && (reservation || blanks === 0);
+  const complete = missing.length === 0 && (reservation || blanks === 0);
 
   const errors = useMemo(
     () => (complete ? validateGameInput(input, rule, roster) : []),
@@ -123,6 +130,16 @@ export function GameForm({
       }}
     >
       <label className="block">
+        <span className="text-muted-foreground text-sm">タイトル</span>
+        <Input
+          value={value.title}
+          onChange={(e) => onChange({ ...value, title: e.target.value })}
+          className="mt-1"
+          placeholder="第3節、月例会 など"
+        />
+      </label>
+
+      <label className="mt-4 block">
         <span className="text-muted-foreground text-sm">日付</span>
         <Input
           type="date"
@@ -217,16 +234,6 @@ export function GameForm({
           : `合計 ${total === null ? "—" : total.toLocaleString()} / ${expectedTotal.toLocaleString()}`}
       </p>
 
-      <label className="mt-4 block">
-        <span className="text-muted-foreground text-sm">タイトル（任意）</span>
-        <Input
-          value={value.title}
-          onChange={(e) => onChange({ ...value, title: e.target.value })}
-          className="mt-1"
-          placeholder="第3節、月例会 など"
-        />
-      </label>
-
       {preview === null ? null : (
         <div className="border-border mt-6 rounded-lg border p-3">
           <p className="text-muted-foreground text-sm">プレビュー</p>
@@ -248,9 +255,9 @@ export function GameForm({
 
       {/* 保存できない理由は常に見せる。押せないボタンだけでは何を直せばよいか分からない。
           ただし「まだ入力していない」と「入力が誤っている」は区別する */}
-      {unselected > 0 ? (
+      {missing.length > 0 ? (
         <p className="text-muted-foreground mt-4 text-sm">
-          あと {unselected} 人を選ぶと保存できます（素点は空のままでも予約として登録できます）
+          {missing.join("と")}を入れると保存できます（素点は空のままでも予約として登録できます）
         </p>
       ) : partial ? (
         <p className="text-destructive mt-4 text-sm">

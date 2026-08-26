@@ -40,6 +40,8 @@ export type ValidationErrorCode =
   | "RAW_SCORE_RANGE"
   /** played_on が YYYY-MM-DD の実在日付でない */
   | "INVALID_DATE"
+  /** title が入っていない（アプリでは必須。DB は NULL 許容） */
+  | "TITLE_REQUIRED"
   /** title が長すぎる */
   | "TITLE_TOO_LONG"
   /** 素点が一部だけ入っている（予約でも確定でもない状態） */
@@ -311,7 +313,23 @@ export function validateGameInput(
     });
   }
 
-  // 11. title の長さ
+  // 11. title が入っている（予約でも必須。同じ日に複数の予定がありうるので、
+  //     「次に誰が打つか」を示すのに日付だけでは足りない）。
+  //
+  //     必須はアプリのバリデーションだけで、DB の title は NULL 許容のまま。
+  //     運営が wrangler d1 execute で直接 INSERT する経路があり（決定#11）、
+  //     DB 側で必須にすると運営が詰まる。素点合計を DB ではなく API で見ているのと同じ非対称。
+  //     NULL の行は存在しうるので、一覧の「タイトルが空なら日付を大きく出す」は残す。
+  if (input.title === null || input.title.trim() === "") {
+    errors.push({
+      code: "TITLE_REQUIRED",
+      field: "title",
+      memberIds: [],
+      message: "タイトルを入力してください",
+    });
+  }
+
+  // 12. title の長さ
   if (input.title !== null && input.title.length > TITLE_MAX_LENGTH) {
     errors.push({
       code: "TITLE_TOO_LONG",

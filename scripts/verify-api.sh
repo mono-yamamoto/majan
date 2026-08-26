@@ -231,10 +231,35 @@ POST_shape "title 61文字は TITLE_TOO_LONG（parse ではなく validation）"
   '[e["code"] for e in d["errors"]][-1]' \
   "{\"leagueId\":1,\"playedOn\":\"2026-08-26\",\"title\":\"$(head -c 61 /dev/zero | tr '\0' 'x')\",\"results\":[{\"memberId\":1,\"rawScore\":42300},{\"memberId\":6,\"rawScore\":28100},{\"memberId\":2,\"rawScore\":18400},{\"memberId\":7,\"rawScore\":11200}]}"
 POST 201 'title ちょうど60文字は通る' "{\"leagueId\":1,\"playedOn\":\"2026-08-29\",\"title\":\"$(head -c 60 /dev/zero | tr '\0' 'x')\",\"results\":[{\"memberId\":1,\"rawScore\":42300},{\"memberId\":6,\"rawScore\":28100},{\"memberId\":2,\"rawScore\":18400},{\"memberId\":7,\"rawScore\":11200}]}"
-POST 201 'rawScore が数値 2.5e4 は通る（文字列 "2.5e4" の 400 と対）' '{"leagueId":1,"playedOn":"2026-08-30","results":[{"memberId":1,"rawScore":2.5e4},{"memberId":6,"rawScore":25000},{"memberId":2,"rawScore":25000},{"memberId":7,"rawScore":25000}]}'
+POST 201 'rawScore が数値 2.5e4 は通る（文字列 "2.5e4" の 400 と対）' '{"leagueId":1,"playedOn":"2026-08-30","title":"2.5e4","results":[{"memberId":1,"rawScore":2.5e4},{"memberId":6,"rawScore":25000},{"memberId":2,"rawScore":25000},{"memberId":7,"rawScore":25000}]}'
+
+echo; echo "===== title は必須（予約でも） ====="
+# 3件の 400 を投げる前に数える。あとで数えたものと突き合わせると恒真になる。
+games_before_title=$(Q "SELECT COUNT(*) AS n FROM games;")
+POST_shape "title 無しは TITLE_REQUIRED" "TITLE_REQUIRED" \
+  '[e["code"] for e in d["errors"]][-1]' \
+  '{"leagueId":1,"playedOn":"2026-08-26","results":[{"memberId":1,"rawScore":42300},{"memberId":6,"rawScore":28100},{"memberId":2,"rawScore":18400},{"memberId":7,"rawScore":11200}]}'
+POST_shape "title が空文字も TITLE_REQUIRED" "TITLE_REQUIRED" \
+  '[e["code"] for e in d["errors"]][-1]' \
+  '{"leagueId":1,"playedOn":"2026-08-26","title":"","results":[{"memberId":1,"rawScore":42300},{"memberId":6,"rawScore":28100},{"memberId":2,"rawScore":18400},{"memberId":7,"rawScore":11200}]}'
+POST_shape "title が空白だけも TITLE_REQUIRED" "TITLE_REQUIRED" \
+  '[e["code"] for e in d["errors"]][-1]' \
+  '{"leagueId":1,"playedOn":"2026-08-26","title":"  ","results":[{"memberId":1,"rawScore":42300},{"memberId":6,"rawScore":28100},{"memberId":2,"rawScore":18400},{"memberId":7,"rawScore":11200}]}'
+check "title 無しの3件は1件も書き込まれていない" "$(Q "SELECT COUNT(*) AS n FROM games;")" "$games_before_title"
+
+echo; echo "===== 予約（素点が全部 null）====="
+POST_shape "予約でも title 無しは TITLE_REQUIRED" "TITLE_REQUIRED" \
+  '[e["code"] for e in d["errors"]][-1]' \
+  '{"leagueId":1,"playedOn":"2026-09-10","results":[{"memberId":1,"rawScore":null},{"memberId":6,"rawScore":null},{"memberId":2,"rawScore":null},{"memberId":7,"rawScore":null}]}'
+POST 201 'title 付きの予約は通る' '{"leagueId":1,"playedOn":"2026-09-10","title":"第4節（予定）","results":[{"memberId":1,"rawScore":null},{"memberId":6,"rawScore":null},{"memberId":2,"rawScore":null},{"memberId":7,"rawScore":null}]}'
+check "予約は raw_score が4行とも NULL" "$(Q "SELECT COUNT(*) AS n FROM game_results gr JOIN games g ON g.id=gr.game_id WHERE g.played_on='2026-09-10' AND gr.raw_score IS NULL;")" "4"
+POST_shape "素点が一部だけなら MIXED_SCORES" "MIXED_SCORES" \
+  '[e["code"] for e in d["errors"]][-1]' \
+  '{"leagueId":1,"playedOn":"2026-09-11","title":"混在","results":[{"memberId":1,"rawScore":25000},{"memberId":6,"rawScore":null},{"memberId":2,"rawScore":null},{"memberId":7,"rawScore":null}]}'
+check "混在は書き込まれていない" "$(Q "SELECT COUNT(*) AS n FROM games WHERE played_on='2026-09-11';")" "0"
 
 echo; echo "===== 同じ日に2半荘（played_on に UNIQUE は無い） ====="
-POST 201 '同じ played_on でもう1半荘' '{"leagueId":1,"playedOn":"2026-08-26","results":[{"memberId":3,"rawScore":30000},{"memberId":8,"rawScore":30000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":20000}]}'
+POST 201 '同じ played_on でもう1半荘' '{"leagueId":1,"playedOn":"2026-08-26","title":"2半荘目","results":[{"memberId":3,"rawScore":30000},{"memberId":8,"rawScore":30000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":20000}]}'
 check "同じ日の半荘が2件ある" "$(Q "SELECT COUNT(*) AS n FROM games WHERE played_on='2026-08-26';")" "2"
 
 echo; echo "===== 並列 POST（MAX(id) の競合が起きないこと） ====="
@@ -245,7 +270,7 @@ before_games=$(Q "SELECT COUNT(*) AS n FROM games;")
 parallel_pids=()
 for i in $(seq 1 8); do
   curl -s -o /dev/null -X POST "${BASE}/api/games" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" \
-    -d '{"leagueId":1,"playedOn":"2026-09-01","results":[{"memberId":1,"rawScore":40000},{"memberId":6,"rawScore":30000},{"memberId":2,"rawScore":20000},{"memberId":7,"rawScore":10000}]}' &
+    -d '{"leagueId":1,"playedOn":"2026-09-01","title":"並列","results":[{"memberId":1,"rawScore":40000},{"memberId":6,"rawScore":30000},{"memberId":2,"rawScore":20000},{"memberId":7,"rawScore":10000}]}' &
   parallel_pids+=($!)
 done
 for p in "${parallel_pids[@]}"; do wait "$p"; done
@@ -266,12 +291,19 @@ echo; echo "===== PATCH: メンバー総入れ替えと title の往復（全置
 PATCHG 200 'メンバーを 1,6,2,7 → 3,8,4,9 に総入れ替え' 1 '{"playedOn":"2026-08-28","title":"入れ替え","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
 check "member_id が入れ替わっている"       "$(Q "SELECT group_concat(member_id) AS ids FROM (SELECT member_id FROM game_results WHERE game_id=1 ORDER BY member_id);")" "3,4,8,9"
 check "入れ替え後も4行のまま"              "$(Q "SELECT COUNT(*) AS n FROM game_results WHERE game_id=1;")" "4"
-PATCHG 200 'title を null にする'            1 '{"playedOn":"2026-08-28","title":null,"results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
-check "title が NULL になった"               "$(Q "SELECT COUNT(*) AS n FROM games WHERE id=1 AND title IS NULL;")" "1"
-PATCHG 200 'title を省略しても null 扱い'    1 '{"playedOn":"2026-08-28","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
-check "省略でも NULL のまま"                "$(Q "SELECT COUNT(*) AS n FROM games WHERE id=1 AND title IS NULL;")" "1"
-PATCHG 200 'title を文字列に戻す'            1 '{"playedOn":"2026-08-28","title":"戻した","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
-check "title が文字列に戻った"               "$(Q "SELECT title FROM games WHERE id=1;")" "戻した"
+# title はアプリのバリデーションでは必須。DB は NULL 許容のまま（運営の SQL 直操作を
+# 妨げないため・決定#11）なので、「API は拒む / DB は受け入れる」の非対称をここで固定する。
+PATCHG 400 'title を null にすると 400'      1 '{"playedOn":"2026-08-28","title":null,"results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
+check "400 のあとも title が変わっていない"  "$(Q "SELECT title FROM games WHERE id=1;")" "入れ替え"
+PATCHG 400 'title の省略も 400'              1 '{"playedOn":"2026-08-28","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
+PATCHG 400 'title が空白だけでも 400'        1 '{"playedOn":"2026-08-28","title":"   ","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
+check "3回の 400 のあとも title は元のまま"  "$(Q "SELECT title FROM games WHERE id=1;")" "入れ替え"
+PATCHG 200 'title を別の文字列に変える'      1 '{"playedOn":"2026-08-28","title":"戻した","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
+check "title が変わった"                     "$(Q "SELECT title FROM games WHERE id=1;")" "戻した"
+# DB 側は NULL を受け入れる（運営が直接 INSERT できる）。API が拒むのと矛盾しないこと。
+W d1 execute majan --local --persist-to "$PERSIST" --command "UPDATE games SET title = NULL WHERE id = 1;" >/dev/null 2>&1
+check "DB は title NULL を受け入れる"        "$(Q "SELECT COUNT(*) AS n FROM games WHERE id=1 AND title IS NULL;")" "1"
+W d1 execute majan --local --persist-to "$PERSIST" --command "UPDATE games SET title = '戻した' WHERE id = 1;" >/dev/null 2>&1
 
 echo; echo "===== 論理削除は片道かつ冪等 ====="
 t 400 'deleted:false（復活）'      -X PATCH "${BASE}/api/games/1/deleted" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" -d '{"deleted":false}'
