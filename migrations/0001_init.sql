@@ -82,8 +82,12 @@ CREATE TABLE game_results (
   id        INTEGER PRIMARY KEY,
   game_id   INTEGER NOT NULL REFERENCES games(id),
   member_id INTEGER NOT NULL REFERENCES members(id),
+  -- NULL 許容。4行すべて NULL なら「予約」（次に誰が対局するかだけ決まった状態）、
+  -- 4行すべて NOT NULL なら「確定」。一部だけ NULL は API が弾く。
+  -- CHECK は式が NULL のとき拒否しないので、予約行はそのまま通る。
+  -- 0 を「未入力」の印にはできない（0 は正当な素点で、箱下と区別がつかない）。
   -- SQLite の % はゼロ方向丸めなので、箱下（負の素点）でも正しく判定される
-  raw_score INTEGER NOT NULL CHECK (raw_score % 100 = 0),
+  raw_score INTEGER CHECK (raw_score % 100 = 0),
   UNIQUE (game_id, member_id)
 ) STRICT;
 
