@@ -31,14 +31,19 @@ CREATE TABLE members (
 CREATE TABLE teams (
   id        INTEGER PRIMARY KEY,
   league_id INTEGER NOT NULL REFERENCES leagues(id),
-  name      TEXT    NOT NULL
+  name      TEXT    NOT NULL,
+  UNIQUE (league_id, id)   -- league_members の複合外部キーの参照先として必要
 ) STRICT;
 
 CREATE TABLE league_members (
   league_id INTEGER NOT NULL REFERENCES leagues(id),
   member_id INTEGER NOT NULL REFERENCES members(id),
-  team_id   INTEGER NOT NULL REFERENCES teams(id),
-  PRIMARY KEY (league_id, member_id)
+  team_id   INTEGER NOT NULL,
+  PRIMARY KEY (league_id, member_id),
+  -- team_id が「同じリーグの」チームであることまで強制する。
+  -- 単独の REFERENCES teams(id) だとチームだけ別リーグの所属行が作れてしまい、
+  -- 別リーグのチームIDで 2-2 固定が成立するサイレント破損になる（この複合FKが包含する）
+  FOREIGN KEY (league_id, team_id) REFERENCES teams(league_id, id)
 ) STRICT;
 
 CREATE TABLE games (
