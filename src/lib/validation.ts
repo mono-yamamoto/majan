@@ -189,11 +189,23 @@ export function validateGameInput(
     }
     const balanced = perTeam.size === 2 && [...perTeam.values()].every((n) => n === 2);
     if (!balanced) {
+      // どこが多いのかを示す。4人全員の名前を並べても直しようがない。
+      // 偏っている側だけを memberIds に入れるので、画面のハイライトもそこだけになる。
+      const sorted = [...perTeam.entries()].sort((a, b) => b[1] - a[1]);
+      const [topTeamId, topCount] = sorted[0] as [number, number];
+      const spansTwoTeams = perTeam.size === 2;
       errors.push({
         code: "TEAM_BALANCE",
         field: "results",
-        memberIds: results.map((r) => r.memberId),
-        message: "各チームからちょうど2人ずつ選んでください",
+        memberIds: spansTwoTeams
+          ? results.filter((r) => roster.get(r.memberId) === topTeamId).map((r) => r.memberId)
+          : results.map((r) => r.memberId),
+        message:
+          perTeam.size === 1
+            ? "4人とも同じチームです。各チームから2人ずつ選んでください"
+            : spansTwoTeams
+              ? `同じチームから${topCount}人選ばれています。各チームから2人ずつ選んでください`
+              : `${perTeam.size}つのチームにまたがっています。2つのチームから2人ずつ選んでください`,
       });
     }
   }
@@ -227,7 +239,7 @@ export function validateGameInput(
         code: "RAW_SCORE_TOTAL",
         field: "results",
         memberIds: [],
-        message: `素点の合計が ${expected} になっていません（現在 ${actual}）`,
+        message: `素点の合計が ${expected.toLocaleString()} になっていません（現在 ${actual.toLocaleString()}）`,
       });
     }
   }

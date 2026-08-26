@@ -146,6 +146,57 @@ describe("validateGameInput / 重複チェックと 2-2 は独立に必要", () 
     expect(codesOf(errors)).not.toContain("DUPLICATE_MEMBER");
   });
 
+  /**
+   * ★どこが多いのかを示す★
+   * 4人全員の名前を並べても直しようがない（画面では全4行が赤枠になる）。
+   * 偏っている側だけを memberIds に入れることで、画面のハイライトもそこだけになる。
+   */
+  it("3-1 に偏っているとき、多い側の3人だけを memberIds に入れる", () => {
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: 1, rawScore: 25000 }, // team 1
+        { memberId: 2, rawScore: 25000 }, // team 1
+        { memberId: 3, rawScore: 25000 }, // team 1
+        { memberId: 6, rawScore: 25000 }, // team 2
+      ],
+    };
+    const errors = validateGameInput(input, RULE, ROSTER);
+    const err = find(errors, "TEAM_BALANCE");
+    expect(err?.memberIds).toEqual([1, 2, 3]);
+    expect(err?.message).toContain("3人");
+    // 少ない側（6）は含めない
+    expect(err?.memberIds).not.toContain(6);
+  });
+
+  it("4人とも同じチームなら、その旨を出して全員を対象にする", () => {
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [1, 2, 3, 5].map((memberId) => ({ memberId, rawScore: 25000 })),
+    };
+    const err = find(validateGameInput(input, RULE, ROSTER), "TEAM_BALANCE");
+    expect(err?.message).toContain("4人とも同じチーム");
+    expect(err?.memberIds).toEqual([1, 2, 3, 5]);
+  });
+
+  it("3チームにまたがるときはその旨を出す", () => {
+    const roster: Roster = new Map([...ROSTER, [11, 3]]);
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: 1, rawScore: 25000 }, // team 1
+        { memberId: 2, rawScore: 25000 }, // team 1
+        { memberId: 6, rawScore: 25000 }, // team 2
+        { memberId: 11, rawScore: 25000 }, // team 3
+      ],
+    };
+    const err = find(validateGameInput(input, RULE, roster), "TEAM_BALANCE");
+    expect(err?.message).toContain("3つのチーム");
+  });
+
   it("4人が同じチームでも弾く", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
@@ -228,7 +279,8 @@ describe("validateGameInput / 6. 素点合計・7. 素点の単位", () => {
     input.results[0].rawScore = 42400; // 合計 +100
     const errors = validateGameInput(input, RULE, ROSTER);
     expect(codesOf(errors)).toContain("RAW_SCORE_TOTAL");
-    expect(find(errors, "RAW_SCORE_TOTAL")?.message).toContain("100000");
+    // 画面の「合計 99,900 / 100,000」と揃うよう桁区切りを入れる
+    expect(find(errors, "RAW_SCORE_TOTAL")?.message).toContain("100,000");
   });
 
   /** 100000 を定数で埋め込まないこと（D-6）。設定が変われば期待値も変わる */
@@ -237,7 +289,7 @@ describe("validateGameInput / 6. 素点合計・7. 素点の単位", () => {
     // 合計 100000 は 25000x4 の値。30000x4 = 120000 なので弾かれる
     const errors = validateGameInput(validInput(), rule, ROSTER);
     expect(codesOf(errors)).toContain("RAW_SCORE_TOTAL");
-    expect(find(errors, "RAW_SCORE_TOTAL")?.message).toContain("120000");
+    expect(find(errors, "RAW_SCORE_TOTAL")?.message).toContain("120,000");
 
     // 合計を 120000 にすれば通る
     const ok = validInput();
