@@ -46,10 +46,13 @@ function parseGameInput(body: unknown): Parsed<GameInput> {
     if (typeof memberId !== "number" || !Number.isSafeInteger(memberId)) {
       return { ok: false, error: `results[${i}].memberId must be an integer` };
     }
+    // null は「予約」（素点がまだ決まっていない）を表す。
+    // 全部 null か全部数値かの検査は validateGameInput（MIXED_SCORES）が行う。
+    //
     // Number.isFinite だけだと 1e19 のような int64 に収まらない値や非整数を通してしまう。
     // ここを緩くするとこの先の型がすべて嘘になるので、安全整数を要求する。
-    if (typeof rawScore !== "number" || !Number.isSafeInteger(rawScore)) {
-      return { ok: false, error: `results[${i}].rawScore must be a safe integer` };
+    if (rawScore !== null && (typeof rawScore !== "number" || !Number.isSafeInteger(rawScore))) {
+      return { ok: false, error: `results[${i}].rawScore must be a safe integer or null` };
     }
     results.push({ memberId, rawScore });
   }

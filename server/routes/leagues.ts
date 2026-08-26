@@ -76,7 +76,7 @@ leagues.get("/api/leagues/:id", async (c) => {
   const league = (leagueRes.results as LeagueRow[])[0];
   if (league === undefined) return c.json({ error: "not found" }, 404);
 
-  const resultsByGame = new Map<number, { memberId: number; rawScore: number }[]>();
+  const resultsByGame = new Map<number, { memberId: number; rawScore: number | null }[]>();
   for (const r of resultRes.results as GameResultRow[]) {
     const list = resultsByGame.get(r.game_id) ?? [];
     list.push({ memberId: r.member_id, rawScore: r.raw_score });

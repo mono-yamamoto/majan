@@ -50,7 +50,8 @@ export type LeagueResponse = {
     playedOn: string;
     memo: string | null;
     createdAt: string;
-    results: { memberId: number; rawScore: number }[];
+    /** 素点。予約（次の対局を先に登録した状態）では全員 null */
+    results: { memberId: number; rawScore: number | null }[];
   }[];
 };
 
@@ -60,7 +61,8 @@ export type LeagueSummary = { id: number; name: string };
 export type GameRequest = {
   playedOn: string;
   memo: string | null;
-  results: { memberId: number; rawScore: number }[];
+  /** 全部数値なら確定、全部 null なら予約。混在は API が弾く */
+  results: { memberId: number; rawScore: number | null }[];
 };
 
 // --- 内部 --------------------------------------------------------------------
