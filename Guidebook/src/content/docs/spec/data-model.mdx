@@ -100,7 +100,13 @@ CREATE TABLE leagues (
   uma_2nd      INTEGER NOT NULL DEFAULT  10,
   uma_3rd      INTEGER NOT NULL DEFAULT -10,
   uma_4th      INTEGER NOT NULL DEFAULT -30,
-  created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  -- ゼロサムの成立条件（→ ポイント計算 / ゼロサムが成立する条件）
+  CHECK (uma_1st + uma_2nd + uma_3rd + uma_4th = 0),
+  CHECK (start_point  % 100 = 0),
+  CHECK (return_point % 100 = 0),
+  -- オカ = (返し点 − 持ち点) × 4 / 1000。負のオカは意味を成さない（オカなしは 返し = 持ち）
+  CHECK (return_point >= start_point)
 ) STRICT;
 
 CREATE TABLE members (
@@ -127,7 +133,13 @@ CREATE TABLE games (
   played_on  TEXT    NOT NULL,
   memo       TEXT,
   created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
-  deleted_at TEXT
+  deleted_at TEXT,
+  -- YYYY-MM-DD の実在日付だけを許す（→ 日付の検証）
+  CHECK (
+    played_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+    AND date(played_on) IS NOT NULL
+    AND date(played_on) = played_on
+  )
 ) STRICT;
 
 CREATE TABLE game_results (
@@ -154,11 +166,42 @@ SQLite は既定だと `INTEGER` カラムに文字列を入れても通って�
 - 素点合計 = `start_point × 4`、2-2 固定は **APIサーバー側でバリデーション**（DBトリガーにはしない。シンプル優先）
 - 削除は `games.deleted_at` をセット。取得時は `deleted_at IS NULL` で絞る
 - オカは `(return_point − start_point) × 4 / 1000` で導出できるので**カラムにしない**
+- `games.played_on` の `CHECK` は **3つの条件をすべて満たす形でないと機能しない**（→ [日付の検証](#日付の検証)）
+- **`game_results.member_id` が「そのリーグに所属しているか」は DB では検証できない**。外部キーは `members(id)` の存在しか見ないので、`league_members` に無いメンバーでも INSERT が通る（実測確認済み）。**APIサーバー側のバリデーションが唯一の防衛線**
+- `leagues` の4つの `CHECK` は **pt計算のゼロサムを守る最後の砦**。`leagues` は管理UIを持たず運営が `wrangler d1 execute` で手打ちSQLを流すテーブル（決定#11）なので、アプリのバリデーション層を一切通らない。typo を止められる場所はここしかない
 - 外部キーは D1 では**既定で常に強制**される。旧構成で必要だった `PRAGMA foreign_keys = ON` は不要（→ [技術スタック](/spec/tech-stack/)）
 
 <Aside type="note" title="pt/順位はDBに持たない">
 `game_results` に pt や rank のカラムは置かない。フロントで `leagues` の設定値から都度計算する。ルール変更時に過去分を再計算する手間がゼロになる。
 </Aside>
+
+## 日付の検証
+
+`played_on` は `TEXT` なので、素朴に `NOT NULL` を付けただけでは `'banana'` も `''` も `'2026-13-99'` も入る（実測確認済み）。日付でグルーピング表示する設計（決定#5）なので、ここが壊れると一覧が崩れる。
+
+3つの条件を **AND で全部** 並べる必要がある。
+
+```sql
+CHECK (
+  played_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'  -- 形式
+  AND date(played_on) IS NOT NULL                              -- NULL比較の穴を塞ぐ
+  AND date(played_on) = played_on                              -- 実在日付か
+)
+```
+
+| 条件 | これだけだと通ってしまうもの |
+|---|---|
+| `GLOB` のみ | `'2026-13-99'` `'2026-02-30'`（形式は合っているが実在しない） |
+| `date(x) = x` のみ | `'banana'` `'2026-13-99'` `'2026-8-6'` |
+| 上記2つ（`IS NOT NULL` なし） | `'2026-13-99'` `'2026-00-10'` |
+
+<Aside type="caution" title="date() は不正な入力に NULL を返す — CHECK は NULL を「合格」とみなす">
+`date('banana')` も `date('2026-13-99')` も **NULL** を返す。SQLite の `CHECK` は式が **偽のときだけ** 拒否し、**NULL のときは通す**。つまり `CHECK (played_on = date(played_on))` は「日付として解釈できない値」を**素通りさせる**。`AND date(played_on) IS NOT NULL` を挟んで初めて塞がる。
+
+なお `date('2026-02-30')` は NULL ではなく **`'2026-03-02'` に正規化**されて返る。この場合は `= played_on` が偽になるので弾ける。壊れ方が入力によって違うので、3条件をすべて並べるのが確実。
+</Aside>
+
+15パターンで検証済み（`2024-02-29` は通り `2025-02-29` は弾く、`UPDATE` でも効く）。
 
 ## 書き込みの原子性
 
@@ -181,8 +224,20 @@ await db.batch([
 ]);
 ```
 
-<Aside type="caution" title="last_insert_rowid() は使わない">
-`last_insert_rowid()` は「直前のINSERT」の rowid を返すので、2件目以降の `game_results` INSERT では **1件目の game_results の id** を返してしまう。`(SELECT MAX(id) FROM games)` なら全行から見て同じ値になる。バリデーションもRLSも無い点は旧構成と同じで、整合性はすべてAPI層の責任。
+<Aside type="danger" title="last_insert_rowid() は使わない（外部キーでも防げない）">
+`last_insert_rowid()` は「直前のINSERT」の rowid を返すので、2件目以降の `game_results` INSERT では **1件目の game_results の id** を返してしまう。`(SELECT MAX(id) FROM games)` なら全行から見て同じ値になる。
+
+**厄介なのは、これを外部キー制約が捕まえてくれないこと。** ローカルの SQLite で実証した結果:
+
+| 入った行 | 参照した `game_id` | 実際 |
+|---|---|---|
+| 1人目 | 22 | ✓ 正しい（今作った半荘） |
+| 2人目 | **3** | ✗ **既存の別の半荘に混入** |
+| 3人目 | **4** | ✗ **既存の別の半荘に混入** |
+
+`games` に id 3 も 4 も存在するので `FOREIGN KEY constraint` は通ってしまい、**エラーは一切出ない**。結果として「新しい半荘には1人分しか入っていない」「無関係な過去の半荘に5人目が生えている」という壊れ方をする。半荘数が少ないうちは `game_results.id` が `games.id` の範囲に届かず**たまたま動いてしまう**ため、運用が進んでから静かに壊れ始める。
+
+整合性はすべてAPI層の責任（バリデーションもRLSも無いのは旧構成と同じ）。`batch()` 全体が1トランザクションなので、`(SELECT MAX(id) FROM games)` は他の書き込みに割り込まれない。
 </Aside>
 
 ## アクセス制御（旧: RLS）

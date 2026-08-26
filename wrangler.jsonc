@@ -12,8 +12,8 @@
     {
       "binding": "DB",
       "database_name": "majan",
-      // TODO(T1): `wrangler d1 create majan` で発行されたIDに差し替える
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // 2026-08-26 `wrangler d1 create majan --location apac` で発行（プライマリ: APAC）
+      "database_id": "1852711d-a80b-469e-a8df-0c71e90dab0f",
     },
   ],
 }

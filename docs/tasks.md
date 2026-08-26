@@ -14,9 +14,9 @@
 
 | ID | タスク | 依存 | 状態 |
 |---|---|---|---|
-| T0 | プロジェクト基盤（git init / Vite+ / React+TS / Tailwind / wrangler.jsonc / 骨格） | – | TODO |
-| T1 | D1スキーマ: `migrations/0001_init.sql` + `db/seed.sql` + ローカル適用確認 | T0 | TODO |
-| T2 | `src/lib/scoring.ts` 純粋関数 + Vitest（**最重要・正確さ勝負**） | T0 | TODO |
+| T0 | プロジェクト基盤（git init / Vite+ / React+TS / Tailwind / wrangler.jsonc / 骨格） | – | **DONE** |
+| T2 | `src/lib/scoring.ts` 純粋関数 + Vitest（**最重要・正確さ勝負**）※T1より前倒し | T0 | **DONE** |
+| T1 | D1スキーマ: `migrations/0001_init.sql` + `db/seed.sql` + ローカル適用確認 | T0 | **DEV中** |
 | T3 | `src/lib/types.ts` + `src/lib/validation.ts`（2-2固定 / 合計 / 100倍数 / 重複） | T2 | TODO |
 | T4 | Hono API `server/`（GET league / POST・PATCH games / auth / batch） | T1,T3 | TODO |
 | T5 | `src/lib/stats.ts` 個人成績・チーム集計 + Vitest | T2 | TODO |
@@ -48,14 +48,38 @@
 
 ## 進捗ログ
 
-- 2026-08-26 タスク表作成。Vite+ は `vite-plus@0.3.0` / CLI `vp` として実在を確認（導入は `curl -fsSL https://vite.plus | bash`）
+- 2026-08-26 タスク表作成。Vite+ は `vite-plus@0.3.0` / CLI `vp` として実在を確認（**導入はローカル devDependency で完結。公式インストーラ不要**。T0実績）
 - 2026-08-26 T0 を dev に発注 / reb にブリーフィング
+- 2026-08-26 **T0 完了（dev）** → コミット `6609ca0`。マネージャー一次確認済み
+  - `Guidebook/` `docs/` `.claude/` 配下は T0 コミットに1件も含まれず（非破壊を確認）
+  - `wrangler.jsonc` は仕様どおり。`src/lib/*.ts` 4本はプレースホルダを維持（スコープ違反なし）
+  - Vite+ は `bun add -D vite-plus` のみで完結。**公式インストーラは不要だった**
+  - dev 自己申告8件（a〜h）はすべて承認。判断の線引き = 「作らないもの」は**製品機能**の掟であり、開発体験のツール設定（`server.proxy` 等）は対象外
+  - **マネージャー指摘1件: `.gitignore` に `.dev.vars` が無い**（`wrangler dev` の正規シークレットファイル。T4で平文コミット事故になる）→ dev に修正依頼済み
+- 2026-08-26 **タスク順序を変更: T1 → T2 を前倒し**
+  - 理由: (1) T1 の `--remote` 適用は実 `database_id` 必須で山本さんの `d1 create` 待ちにブロックされている (2) T2 は依存が T0 のみで外部ブロッカーゼロ (3) T2 が最もバグりやすく価値が高い（同点折半・端数のゼロサム）
 - 2026-08-26 reb の仕様書指摘を反映（マネージャー対応）
   - `scoring.mdx` 全員同点テスト観点の式が pt=0.0 と矛盾していたのを修正
   - 素点合計の固定値 `100,000` を **`start_point × 4`** 表記に統一（features / overview / usage / scoring の計5箇所）
   - `scoring.ts` 実装イメージの `okaDeci` に `Math.round` を追加（返し点−持ち点が25の倍数でない設定でも deci-pt 整数前提を維持）
   - **未定義だった修正・削除APIの契約を確定**し `features.mdx#apiの形` として明文化（下記「決定事項」参照）
   - 全8ページの表示を `astro dev` で200確認済み
+
+- 2026-08-26 **T0 レビュー完了（reb）** → Blocker 0 / Major 0 / Minor 2 / Nit 2 で**マージ可**。T0 **DONE**
+  - reb がマネージャーの一次判断を2点訂正: (1) `.gitignore` は T0 でなく初期コミット `1914977` 由来 (2) `.dev.vars` 欠落の深刻度は Blocker でなく **Minor**（未存在で実害ゼロ、T4着手前に入れば十分）。**reb の calibration が正しい**
+  - reb 独自の指摘 [Minor]: `vite-plus` が `^0.3.0` なのに `vite` エイリアス／`overrides.vite` は `0.3.0` 固定で range 不揃い → T2 で exact 固定に揃える
+  - `overrides` + direct alias の二重指定は**妥当**と裏取り済み（役割が違うので両方必要）
+- 2026-08-26 **T2 を dev に発注**（scoring.ts + Vitest）
+- 2026-08-26 **D1 本番DB 作成完了**（山本さん操作）
+  - `database_id` = `1852711d-a80b-469e-a8df-0c71e90dab0f` / **`running_in_region: APAC`**（D-7 達成）/ `num_tables: 0`
+  - Cloudflare アカウント: `y.yamamoto@monosus.co.jp` / Account ID `cedbae4a43f7534c4272f5f30f5ecc5c`（**会社アカウント**。→ 未決事項参照）
+  - `wrangler` の対話プロンプトが `wrangler.jsonc` に **binding `majan` の重複エントリを追記 + 全体をタブ再整形 + 末尾改行削除**を行ったため、マネージャーが `git checkout` で復元し `database_id` の2行だけを差し替えた。**binding は `DB` が正**（`env.DB` で参照する仕様）
+  - → **T1 のブロック解除**
+- 2026-08-26 **T2 完了**（コミット `5fa508b` + 修正 `012a435`）。reb 再確認で**指摘なし**
+  - `scoreGame` に事前条件 `RangeError`（件数チェック）を追加。業務バリデーション（T3）とは別物という線引きを確立
+  - 網羅テストの不変条件を強化。**旧 sweep は「ウマ逆順」「rank誤り」「全員pt=0」を1件も検出できていなかった**ことを dev が before/after の mutation check で実証
+  - `Math.round(uma×10)` は「ゼロサムを直す」のではなく「**壊れ方を構造依存から定数に変える**」修正だったと dev が自己申告 → 検証して正しいと確認、条件2の厳密形を `scoring.mdx` に明記
+- 2026-08-26 **未決事項**: 本プロジェクトの Cloudflare / GitHub を**会社アカウント配下に置くか**。`db/seed.sql` にメンバー10人の実名が入るため、個人アカウントへの分離を推奨として提示済み（山本さん判断待ち）
 
 ## マネージャー決定事項（仕様書に反映済み）
 
@@ -78,3 +102,30 @@ DB操作は `batch()` 内で **該当 `game_id` の `game_results` を全削除 
 
 ### D-6: 素点合計チェックは `start_point × 4`
 `100000` の定数埋め込みは **レビューで Blocker 扱い**。
+
+### D-10: `db/seed.sql` は**プレースホルダ名のみ**をコミット。実名は gitignore する
+`Guidebook` の例と同じダミー名（山田・佐藤…）で `db/seed.sql` をコミットし、**実際のメンバー10人の実名は `db/seed.local.sql`（gitignore 対象）に書く**。
+理由: リポジトリと Cloudflare が会社アカウント配下にあるため（未決事項）、身内10人の実名を git 履歴に永久に残さない。
+`db/seed.sql` は「形を示すテンプレート」、`db/seed.local.sql` は「実際に流すもの」という役割分担にする。
+`.gitignore` に `db/seed.local.sql` を追加すること。
+
+### D-8: T1 のスキーマ・seed はローカル SQLite 3.51 でドライラン検証済み
+マネージャーが実機検証した結果（T1/T4 のレビュー基準として使う）:
+- `leagues` の `CHECK` 4本（Σuma=0 / start%100 / return%100 / return≥start）は **INSERT でも UPDATE でも効く**
+- `raw_score % 100 = 0` は**負の素点でも正しい**（SQLite の `%` はゼロ方向丸め。`-1500`→通す、`-150`/`-50`→弾く）
+- 外部キー違反（存在しない league/member/game）は全パターン弾かれる
+- `seed.sql` の**再実行は `UNIQUE constraint failed: leagues.id` で落ちる**＝二重投入で壊れない安全側
+- `(SELECT MAX(id) FROM games)` パターンは4行すべて同じ `game_id` を指す（count=4 / sum=100000 で確認）
+- **`last_insert_rowid()` は外部キーでも防げない**（下記）
+
+### D-9: `last_insert_rowid()` の危険性を実証（T4 のレビュー基準）
+FK を D1 相当（常時ON）にして実測したところ、`last_insert_rowid()` 使用時は
+1人目 → `game_id=22`（正）/ 2人目 → `game_id=3` / 3人目 → `game_id=4` と**既存の別半荘に混入**し、
+`games` に id 3・4 が存在するため **FOREIGN KEY 制約が通ってしまいエラーが出ない**。
+半荘数が少ないうちは `game_results.id` が `games.id` の範囲に届かず**たまたま動く**ため、運用が進んでから静かに壊れ始める。
+→ T4 で `last_insert_rowid()` が使われていたら **Blocker**。`data-model.mdx` に実証データつきで明記済み。
+
+### D-7: D1 のプライマリロケーションは `apac` を明示指定
+`wrangler d1 create majan --location apac`。メンバー全員が日本在住のため。
+**プライマリロケーションは作成後に変更できない**（export→新DB作成→import→`database_id` 差し替えのやり直しになる）。
+`d1 create` を叩くその一回が決定タイミング。→ `tech-stack.mdx` に追記済み。
