@@ -1,12 +1,20 @@
 -- 初期データの「形を示すテンプレート」。名前はすべてプレースホルダ（決定 D-10）。
 --
--- 実際のメンバーの氏名は db/seed.local.sql に書き、そちらを本番へ流す。
--- seed.local.sql は .gitignore 済みで、git 履歴には残らない。
---   cp db/seed.sql db/seed.local.sql   # 名前を実名に書き換えてから流す
+-- 実際のメンバーの氏名はこのファイルに書かない。運営が db/seed.local.sql を作り、
+-- そちらを本番へ流す（決定 D-11: seed.local.sql は運営本人が作成し、実名は
+-- 開発者にも渡さない）。seed.local.sql は .gitignore 済みで git 履歴には残らない。
 --
--- 適用:
---   wrangler d1 execute majan --local  --file=./db/seed.local.sql
---   wrangler d1 execute majan --remote --file=./db/seed.local.sql   # 本番（T11・運営操作）
+-- 運営の手順:
+--   1. cp db/seed.sql db/seed.local.sql
+--   2. seed.local.sql の members の名前を実名に書き換える
+--      （リーグ名・チーム名も必要なら変える。id と件数は変えない）
+--   3. 流す
+--        wrangler d1 execute majan --local  --file=./db/seed.local.sql
+--        wrangler d1 execute majan --remote --file=./db/seed.local.sql   # 本番（T11）
+--   4. 確認（チームごとに5人ずつ、team が同じリーグのものになっていること）
+--        wrangler d1 execute majan --remote --command \
+--          "SELECT t.name, COUNT(*) AS n, SUM(t.league_id <> lm.league_id) AS wrong_league \
+--           FROM league_members lm JOIN teams t ON t.id = lm.team_id GROUP BY t.id;"
 --
 -- id を明示しているので、二重に流すと UNIQUE constraint failed で落ちる。
 -- 「投入済みのDBを黙って壊さない」ための安全側の挙動なので、
