@@ -16,7 +16,7 @@
 |---|---|---|---|
 | T0 | プロジェクト基盤（git init / Vite+ / React+TS / Tailwind / wrangler.jsonc / 骨格） | – | **DONE** |
 | T2 | `src/lib/scoring.ts` 純粋関数 + Vitest（**最重要・正確さ勝負**）※T1より前倒し | T0 | **DONE** |
-| T1 | D1スキーマ: `migrations/0001_init.sql` + `db/seed.sql` + ローカル適用確認 | T0 | **DEV中** |
+| T1 | D1スキーマ: `migrations/0001_init.sql` + `db/seed.sql` + ローカル適用確認 | T0 | **追補中**（複合FK） |
 | T3 | `src/lib/types.ts` + `src/lib/validation.ts`（2-2固定 / 合計 / 100倍数 / 重複） | T2 | TODO |
 | T4 | Hono API `server/`（GET league / POST・PATCH games / auth / batch） | T1,T3 | TODO |
 | T5 | `src/lib/stats.ts` 個人成績・チーム集計 + Vitest | T2 | TODO |
@@ -37,6 +37,20 @@
 5. `WRITE_PASSCODE` は**ビルドに埋め込まない**（`VITE_` 接頭辞禁止）
 6. 削除は論理削除のみ。`DELETE` エンドポイントを作らない
 7. コミットは意味のある単位で。1タスク=1ブランチ推奨
+
+## T4 の Blocker 条件（確定分）
+
+T4（Hono API）のレビューで、以下が守られていなければ **Blocker**。
+
+| # | 条件 | 根拠 |
+|---|---|---|
+| 1 | `last_insert_rowid()` を使っていない（`(SELECT MAX(id) FROM games)` を使う） | D-9。**FKでも防げず既存の別半荘に混入する**ことを実測 |
+| 2 | リーグ所属チェックがある（`league_members` を `league_id` で絞って引く） | D-13。**DBでは検証不可能**、APIが唯一の防衛線 |
+| 3 | `PATCH` の `league_id` を DB の `games` 行から読んでいる | D-14。ボディを信じると所属チェックが無意味化 |
+| 4 | `pt` / `rank` を DB に書いていない | 決定#14 |
+| 5 | `DELETE` エンドポイントを作っていない / 物理削除していない | 決定#9 |
+| 6 | 運営系テーブル（`leagues` `teams` `members` `league_members`）への書き込みAPIを作っていない | 決定#11 |
+| 7 | 素点合計チェックが `start_point × 4`（`100000` のハードコードなし） | D-6 |
 
 ## レビュー観点（reb 共通）
 
@@ -103,6 +117,63 @@ DB操作は `batch()` 内で **該当 `game_id` の `game_results` を全削除 
 ### D-6: 素点合計チェックは `start_point × 4`
 `100000` の定数埋め込みは **レビューで Blocker 扱い**。
 
+### D-11: `db/seed.local.sql` は**山本さん本人が作る**
+実名を書いた `db/seed.local.sql` は、`cp db/seed.sql db/seed.local.sql` して**山本さん自身が編集する**。
+理由: D-10 で「実名を git 履歴に残さない」と決めた以上、**実名がエージェントの会話ログを経由するのも避ける**のが一貫している。
+`db/seed.sql` の冒頭コメントに手順を書いてあるので、それに従えば運営が単独で完結できる。
+
+### D-12: `games.played_on` に実在日付の `CHECK` を追加
+```sql
+CHECK (
+  played_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+  AND date(played_on) IS NOT NULL
+  AND date(played_on) = played_on
+)
+```
+3条件すべてが必要。`date('banana')` は NULL を返し、SQLite の `CHECK` は**偽のときだけ拒否し NULL は通す**ため `= date(...)` だけでは素通りする。
+一方 `date('2026-02-30')` は NULL でなく `'2026-03-02'` に正規化されるので `=` が偽になり弾ける。入力によって壊れ方が違う。
+マネージャーと dev が独立に15パターンで検証し、**結果が完全一致**。
+
+### D-14: `PATCH /api/games/:id` の `league_id` はリクエストから受け取らない ★T4 Blocker
+dev が発見（マネージャーも reb も見落としていた）。ボディの `leagueId` を信じると**所属チェックが自己申告になって無意味化**する。
+「リーグ2のメンバー4人 + `leagueId: 2`」を送れば整合してしまい、**リーグ1の半荘がリーグ2にすり替わる**。
+
+| 送られてきたもの | 扱い |
+|---|---|
+| `leagueId` なし / DB と一致 | 正常（DB の値を使う） |
+| **DB と不一致** | **`400`**。黙って無視は不可（「送ったのに効かない」が見えなくなる） |
+
+- **`roster` を引く `league_id` も DB 由来の値**を使う（ボディの値で引いたら経路が変わっただけで同じ穴）
+- `POST /api/games` は `leagueId` を受け取ってよいが、**存在しない `league_id` は `404`** で明示的に弾く（FK で落ちるに任せない）
+
+### D-15: `league_members.team_id` は複合外部キーで「同じリーグのチーム」を強制する
+dev と reb が独立に発見。単独の `REFERENCES teams(id)` だと**別リーグのチームを指せてしまい、2-2判定が静かに狂う**。
+```sql
+-- teams
+UNIQUE (league_id, id)
+-- league_members（単独の REFERENCES teams(id) は削除）
+FOREIGN KEY (league_id, team_id) REFERENCES teams(league_id, id)
+```
+両者は「割に合わない/Nit」と判断したが、**`d1 info` で `num_tables: 0`（本番未適用）を確認済み**のため実作業は2行編集 + ローカル再適用のみ。マネージャー判断で格上げ。
+列順が `(league_id, team_id) → (league_id, id)` で揃っていること（逆順だと型は通るが意味が壊れる）。
+
+### D-16: `validation.ts` は Roster を引数で受け取る純粋関数にする
+```ts
+type Roster = Map<number, number>;   // memberId → teamId
+export function validateGameInput(input, rule, roster): ValidationError[];
+```
+DB にも HTTP にも依存させない（`scoreGame` と同じ設計思想）。フロントは取得済みデータから、API は **`WHERE league_id = ?1` の1クエリ**で組む（メンバーごとに4回引かない）。
+
+### D-17: リーグを外れたメンバーの過去半荘は編集不能でよい
+所属チェックで落ちる。**運営が `wrangler d1 execute` で直す**（決定#11と一貫）。
+PATCH で所属チェックを緩める方向では直さない（D-13 の穴を編集経路から開け直すため）。
+T7 の編集画面に「このメンバーは現在リーグに所属していません」と表示する。
+
+### D-13: `member_id` の「リーグ所属」は DB では検証できない
+外部キーは `members(id)` の存在しか見ず、`league_members` にそのリーグで載っているかは検査しない（実測確認済み）。
+**API のバリデーションが唯一の防衛線**。2-2固定チェックで `league_members` を引くついでに「4人とも引けたか」を見る設計にする（T3）。
+→ T4 で所属チェックが無ければ **Blocker**。
+
 ### D-10: `db/seed.sql` は**プレースホルダ名のみ**をコミット。実名は gitignore する
 `Guidebook` の例と同じダミー名（山田・佐藤…）で `db/seed.sql` をコミットし、**実際のメンバー10人の実名は `db/seed.local.sql`（gitignore 対象）に書く**。
 理由: リポジトリと Cloudflare が会社アカウント配下にあるため（未決事項）、身内10人の実名を git 履歴に永久に残さない。
@@ -114,6 +185,11 @@ DB操作は `batch()` 内で **該当 `game_id` の `game_results` を全削除 
 - `leagues` の `CHECK` 4本（Σuma=0 / start%100 / return%100 / return≥start）は **INSERT でも UPDATE でも効く**
 - `raw_score % 100 = 0` は**負の素点でも正しい**（SQLite の `%` はゼロ方向丸め。`-1500`→通す、`-150`/`-50`→弾く）
 - 外部キー違反（存在しない league/member/game）は全パターン弾かれる
+- **【訂正】STRICT の「型が強制される」の正確な意味**（dev の指摘で判明）。当初「TEXT混入を弾く」と記録したが一般化が広すぎた。実際に検証したのは `'abc'` で、それは弾かれる。正しくは:
+  - `'25000'` `' 25000'` `'1e3'` → **通る**（それぞれ integer 25000 / 25000 / 1000 に無損失変換される）
+  - `'abc'`（TEXTのまま）/ `'25000.5'`（REALになる）→ 弾く
+  - **`CHECK` は変換後の値に効く**ので「TEXT で入れて制約をすり抜ける」抜け道は存在しない（`'25050'` は `start_point % 100 = 0` で弾かれる）
+  - → 実害なし。`data-model.mdx` の STRICT の記述も修正不要
 - `seed.sql` の**再実行は `UNIQUE constraint failed: leagues.id` で落ちる**＝二重投入で壊れない安全側
 - `(SELECT MAX(id) FROM games)` パターンは4行すべて同じ `game_id` を指す（count=4 / sum=100000 で確認）
 - **`last_insert_rowid()` は外部キーでも防げない**（下記）

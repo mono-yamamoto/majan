@@ -22,16 +22,28 @@ import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 アプリに管理画面はないので、`wrangler` で D1 に直接投入する。
 
 <Steps>
-1. `db/seed.sql` を編集して10人の名前・チーム分けを書く
+1. `db/seed.sql` を **`db/seed.local.sql` にコピーして** 10人の名前・チーム分けを書く（→ 下の Aside）
 2. マイグレーションを適用（`wrangler d1 migrations apply majan --remote`）してテーブルを作る
-3. `seed.sql` を流し込む
+3. `seed.local.sql` を流し込む
 4. `WRITE_PASSCODE` を設定し、入力係にだけ共有する
 5. アプリURLを全員に共有
 </Steps>
 
+<Aside type="caution" title="実名は seed.local.sql に書く。seed.sql は編集しない">
+`db/seed.sql` は **プレースホルダ名（山田・佐藤…）のテンプレート** で、リポジトリにコミットされている。**ここに実名を書いてはいけない。**
+
+```bash
+cp db/seed.sql db/seed.local.sql   # これを編集して実名を入れる
+```
+
+`db/seed.local.sql` は `.gitignore` 済みなので、**メンバー10人の実名が git 履歴に残らない**。リポジトリや Cloudflare アカウントの管理が将来変わっても、身内の実名が付いて回ることがなくなる。
+
+流し込むのは常に `seed.local.sql` の方。
+</Aside>
+
 <Tabs>
-  <TabItem label="seed.sql">
-```sql title="db/seed.sql"
+  <TabItem label="seed.local.sql">
+```sql title="db/seed.local.sql"（db/seed.sql をコピーして実名に置き換える）
 INSERT INTO leagues (id, name, start_point, return_point, uma_1st, uma_2nd, uma_3rd, uma_4th)
 VALUES (1, '2026 秋リーグ', 25000, 30000, 30, 10, -10, -30);
 
@@ -54,7 +66,7 @@ INSERT INTO league_members (league_id, member_id, team_id) VALUES
 wrangler d1 migrations apply majan --remote
 
 # seed を流し込む
-wrangler d1 execute majan --remote --file=./db/seed.sql
+wrangler d1 execute majan --remote --file=./db/seed.local.sql
 
 # 確認
 wrangler d1 execute majan --remote --command "SELECT * FROM league_members;"
@@ -66,7 +78,7 @@ wrangler secret put WRITE_PASSCODE
   <TabItem label="ローカルで確認">
 ```bash
 wrangler d1 migrations apply majan --local   # .wrangler/state/ 配下にSQLiteが作られる
-wrangler d1 execute majan --local --file=./db/seed.sql
+wrangler d1 execute majan --local --file=./db/seed.local.sql
 bun run dev                                  # Vite+ dev + wrangler dev
 ```
 

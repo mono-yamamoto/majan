@@ -117,14 +117,17 @@ CREATE TABLE members (
 CREATE TABLE teams (
   id        INTEGER PRIMARY KEY,
   league_id INTEGER NOT NULL REFERENCES leagues(id),
-  name      TEXT    NOT NULL
+  name      TEXT    NOT NULL,
+  UNIQUE (league_id, id)   -- 下の複合外部キーの参照先として必要
 ) STRICT;
 
 CREATE TABLE league_members (
   league_id INTEGER NOT NULL REFERENCES leagues(id),
   member_id INTEGER NOT NULL REFERENCES members(id),
-  team_id   INTEGER NOT NULL REFERENCES teams(id),
-  PRIMARY KEY (league_id, member_id)
+  team_id   INTEGER NOT NULL,
+  PRIMARY KEY (league_id, member_id),
+  -- team_id が「同じリーグの」チームであることまで強制する（→ 所属とチームの整合）
+  FOREIGN KEY (league_id, team_id) REFERENCES teams(league_id, id)
 ) STRICT;
 
 CREATE TABLE games (
@@ -173,6 +176,27 @@ SQLite は既定だと `INTEGER` カラムに文字列を入れても通って�
 
 <Aside type="note" title="pt/順位はDBに持たない">
 `game_results` に pt や rank のカラムは置かない。フロントで `leagues` の設定値から都度計算する。ルール変更時に過去分を再計算する手間がゼロになる。
+</Aside>
+
+## 所属とチームの整合
+
+`league_members.team_id` を素朴に `REFERENCES teams(id)` と書くと、**別のリーグのチームを指せてしまう**。外部キーは `teams(id)` の存在しか見ないので、「リーグ1に所属しているのに、チームはリーグ2のもの」という行が通ってしまう（実測確認済み）。
+
+これが起きると **2-2固定の判定が静かに狂う**。判定は `league_members.team_id` でグループ化するので、リーグをまたいだチームが混ざると「各チーム2人ずつ」の数え方そのものが崩れる。エラーは出ない。
+
+複合外部キーで塞ぐ。
+
+```sql
+-- teams 側に参照先となる複合 UNIQUE を用意し、
+UNIQUE (league_id, id)
+-- league_members 側から (league_id, team_id) の組で参照する
+FOREIGN KEY (league_id, team_id) REFERENCES teams(league_id, id)
+```
+
+これで「別リーグのチーム」「存在しないチーム」の両方が INSERT でも UPDATE でも弾かれる。`league_members` の `team_id` に単独の `REFERENCES teams(id)` は不要になる（複合FKが包含する）。
+
+<Aside type="caution" title="入れるなら 0001 のうちに">
+SQLite は `ALTER TABLE` で外部キーを追加できない。後から入れるには「新テーブル作成 → `INSERT INTO ... SELECT` → 旧テーブル DROP → RENAME」の再構築が要る。`0001_init.sql` が本番に適用される前が最後のタイミング。
 </Aside>
 
 ## 日付の検証
@@ -265,7 +289,7 @@ export const requirePasscode: MiddlewareHandler<{ Bindings: Bindings }> = async 
 - `migrations/` に連番SQLを置き、`wrangler d1 migrations apply` が未適用分を順に流す（適用履歴は D1 が `d1_migrations` テーブルで管理）
 - 旧構成の自前ランナー（`db/migrate.ts` + `PRAGMA user_version`）は**不要になった**
 - 型は生成せず、`src/lib/types.ts` に**手書き**する（テーブル7個・カラム30個弱なので生成ツールに見合わない）
-- 初期データ（メンバー10人・リーグ・チーム・所属）は `db/seed.sql`
+- 初期データ（メンバー10人・リーグ・チーム・所属）は **`db/seed.local.sql`**。`db/seed.sql` はプレースホルダ名のテンプレートで、**実名を書かずにコミットする**（→ [使い方](/spec/usage/#リーグ立ち上げ運営シーズン開始時に1回)）
 
 ```bash
 wrangler d1 migrations create majan init     # migrations/0001_init.sql の雛形が作られる
