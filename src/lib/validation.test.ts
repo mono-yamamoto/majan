@@ -581,6 +581,81 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
   });
 });
 
+describe("validateGameInput / 予約（素点が全部 null）", () => {
+  const reservation = (): GameInput => ({
+    playedOn: "2026-09-10",
+    memo: null,
+    results: [
+      { memberId: 1, rawScore: null },
+      { memberId: 6, rawScore: null },
+      { memberId: 2, rawScore: null },
+      { memberId: 7, rawScore: null },
+    ],
+  });
+
+  it("素点が全部 null なら通る（予約）", () => {
+    expect(validateGameInput(reservation(), RULE, ROSTER)).toEqual([]);
+  });
+
+  it("予約でも 2-2固定は守らせる（次に誰が対局するかを示すのが目的）", () => {
+    const input = reservation();
+    input.results = [1, 2, 3, 6].map((memberId) => ({ memberId, rawScore: null }));
+    expect(codesOf(validateGameInput(input, RULE, ROSTER))).toContain("TEAM_BALANCE");
+  });
+
+  it("予約でも件数・重複・所属・日付は守らせる", () => {
+    const dup = reservation();
+    dup.results[1] = { memberId: 1, rawScore: null };
+    expect(codesOf(validateGameInput(dup, RULE, ROSTER))).toContain("DUPLICATE_MEMBER");
+
+    const stray = reservation();
+    stray.results[3] = { memberId: 99, rawScore: null };
+    expect(codesOf(validateGameInput(stray, RULE, ROSTER))).toContain("NOT_IN_LEAGUE");
+
+    const badDate = reservation();
+    badDate.playedOn = "2026-02-30";
+    expect(codesOf(validateGameInput(badDate, RULE, ROSTER))).toContain("INVALID_DATE");
+  });
+
+  it("予約では素点系のチェックを行わない（合計・単位・範囲）", () => {
+    const codes = codesOf(validateGameInput(reservation(), RULE, ROSTER));
+    expect(codes).not.toContain("RAW_SCORE_TOTAL");
+    expect(codes).not.toContain("RAW_SCORE_UNIT");
+    expect(codes).not.toContain("RAW_SCORE_RANGE");
+    expect(codes).not.toContain("RAW_SCORE_NOT_A_NUMBER");
+  });
+
+  /**
+   * ★一部だけ入っている状態は予約でも確定でもない★
+   * 集計に入れるかどうかが決められなくなるので受け付けない。
+   */
+  it("素点が一部だけ入っていたら MIXED_SCORES", () => {
+    const input = reservation();
+    input.results[0] = { memberId: 1, rawScore: 25000 };
+    const errors = validateGameInput(input, RULE, ROSTER);
+    expect(codesOf(errors)).toContain("MIXED_SCORES");
+    // 空いている3人を指す
+    expect(find(errors, "MIXED_SCORES")?.memberIds).toEqual([6, 2, 7]);
+  });
+
+  it("一部だけ入っているとき、素点合計のエラーは出さない（判定が意味を持たない）", () => {
+    const input = reservation();
+    input.results[0] = { memberId: 1, rawScore: 25000 };
+    expect(codesOf(validateGameInput(input, RULE, ROSTER))).not.toContain("RAW_SCORE_TOTAL");
+  });
+
+  it("全部入っていれば従来どおり確定として検査する", () => {
+    const input = reservation();
+    input.results = [
+      { memberId: 1, rawScore: 42300 },
+      { memberId: 6, rawScore: 28100 },
+      { memberId: 2, rawScore: 18400 },
+      { memberId: 7, rawScore: 11200 },
+    ];
+    expect(validateGameInput(input, RULE, ROSTER)).toEqual([]);
+  });
+});
+
 describe("validateGameInput / 10. memo の長さ", () => {
   const withMemo = (memo: string | null): GameInput => ({ ...validInput(), memo });
 

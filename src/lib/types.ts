@@ -57,8 +57,12 @@ export type GameResultRow = {
   id: number;
   game_id: number;
   member_id: number;
-  /** 素点。100 の倍数、負数可（箱下） */
-  raw_score: number;
+  /**
+   * 素点。100 の倍数、負数可（箱下）。
+   * 予約（次の対局を先に登録した状態）では NULL。4行そろって NULL か、
+   * 4行そろって NOT NULL のどちらかで、混在は API が弾く。
+   */
+  raw_score: number | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -77,7 +81,8 @@ export type GameInput = {
   /** YYYY-MM-DD */
   playedOn: string;
   memo: string | null;
-  results: { memberId: number; rawScore: number }[];
+  /** 素点は全部入れる（確定）か全部 null（予約）かのどちらか。混在は弾かれる */
+  results: { memberId: number; rawScore: number | null }[];
 };
 
 /**

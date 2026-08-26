@@ -41,7 +41,9 @@ export type ValidationErrorCode =
   /** played_on が YYYY-MM-DD の実在日付でない */
   | "INVALID_DATE"
   /** memo が長すぎる */
-  | "MEMO_TOO_LONG";
+  | "MEMO_TOO_LONG"
+  /** 素点が一部だけ入っている（予約でも確定でもない状態） */
+  | "MIXED_SCORES";
 
 /**
  * memo の上限。セキュリティではなく取得性能のための上限で、
@@ -220,8 +222,27 @@ export function validateGameInput(
   // 小数（42300.5）はどちらにも含めない。原因は桁でも読めなさでもなく入力単位なので、
   // % 100 が 0 にならないことを使って 7. の RAW_SCORE_UNIT が拾う
   // （x % 100 === 0 を満たす有限の非整数は存在しない）。
-  const notANumber = results.filter((r) => !Number.isFinite(r.rawScore));
-  const outOfRange = results.filter(
+  // 素点は「全部入れる」（確定）か「全部空」（予約）のどちらか。
+  // 一部だけ入っていると、その半荘は予約でも確定でもない中途半端な状態になり、
+  // 集計に入れるかどうかが決められない。
+  const filled = results.filter((r) => r.rawScore !== null);
+  const isReservation = results.length > 0 && filled.length === 0;
+  const isMixed = filled.length > 0 && filled.length < results.length;
+
+  if (isMixed) {
+    errors.push({
+      code: "MIXED_SCORES",
+      field: "results",
+      memberIds: results.filter((r) => r.rawScore === null).map((r) => r.memberId),
+      message: "素点は4人ぶんすべて入力するか、すべて空にしてください（予約として登録されます）",
+    });
+  }
+
+  // 以降の素点チェックは、素点が入っている行だけを対象にする。
+  // 予約（すべて空）ならまるごと飛ばす。
+  const scored = filled as { memberId: number; rawScore: number }[];
+  const notANumber = scored.filter((r) => !Number.isFinite(r.rawScore));
+  const outOfRange = scored.filter(
     (r) =>
       Number.isFinite(r.rawScore) &&
       Number.isInteger(r.rawScore) &&
@@ -230,10 +251,10 @@ export function validateGameInput(
   const hasOutOfRange = notANumber.length > 0 || outOfRange.length > 0;
   const unusable = new Set([...notANumber, ...outOfRange]);
 
-  // 6. 素点合計（4人ぶんそろっていないと意味がない）
-  if (hasExactCount && !hasOutOfRange) {
+  // 6. 素点合計（4人ぶんそろっていないと意味がない。予約と混在は対象外）
+  if (hasExactCount && !hasOutOfRange && !isReservation && !isMixed) {
     const expected = rule.startPoint * playersPerGame;
-    const actual = results.reduce((sum, r) => sum + r.rawScore, 0);
+    const actual = scored.reduce((sum, r) => sum + r.rawScore, 0);
     if (actual !== expected) {
       errors.push({
         code: "RAW_SCORE_TOTAL",
@@ -247,7 +268,7 @@ export function validateGameInput(
   // 7. 素点の単位（箱下は負数を弾かないことで満たす）
   // 桁が範囲外の素点は 8. で報告するので、ここでは見ない。
   // 1e19 は % 100 === 0 が成立してしまうため「100点単位です」と言うと誤解を招く
-  const badUnit = results
+  const badUnit = scored
     .filter((r) => !unusable.has(r) && r.rawScore % 100 !== 0)
     .map((r) => r.memberId);
   if (badUnit.length > 0) {
