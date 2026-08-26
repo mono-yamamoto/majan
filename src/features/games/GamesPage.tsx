@@ -42,6 +42,24 @@ export function GamesPage() {
       ) : (
         <ul className="mt-4 space-y-4">
           {ordered.map((game) => {
+            // scoreGame は4件でないと RangeError を投げる（事前条件・T2）。
+            // games / game_results は運営が SQL で直接触れるので（決定#11）、
+            // 4件でない半荘は作れてしまう。ここで分岐しないと**一覧全体が落ちて**
+            // 閲覧者10人全員の画面が消える。壊れた行だけ出して他は通常どおり見せる。
+            if (game.results.length !== 4) {
+              return (
+                <li key={game.id} className="border-destructive rounded-lg border p-3">
+                  <div className="flex items-baseline justify-between">
+                    <span className="font-medium">{game.playedOn}</span>
+                    <span className="text-muted-foreground text-xs">#{game.id}</span>
+                  </div>
+                  <p className="text-destructive mt-2 text-sm">
+                    データ不整合（4人ぶんそろっていません: {game.results.length}人）。
+                    運営に連絡してください。
+                  </p>
+                </li>
+              );
+            }
             const scored = scoreGame(game.results, rule);
             return (
               <li key={game.id} className="border-border rounded-lg border p-3">

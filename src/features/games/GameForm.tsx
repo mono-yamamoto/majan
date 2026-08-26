@@ -13,7 +13,7 @@ import { useLeague } from "@/lib/league-context";
 import { scoreGame } from "@/lib/scoring";
 import type { GameInput } from "@/lib/types";
 import { validateGameInput, type ValidationError } from "@/lib/validation";
-import { toGameInput, type GameFormValue } from "./game-form-value";
+import { toGameInput, type GameFormRow, type GameFormValue } from "./game-form-value";
 
 export function GameForm({
   value,
@@ -33,7 +33,7 @@ export function GameForm({
   serverErrors?: ValidationError[];
   extraMessage?: string | null;
 }) {
-  const { members, league, roster } = useLeague();
+  const { members, teams, league, roster } = useLeague();
 
   const input = useMemo(() => toGameInput(value), [value]);
   const rule = useMemo(
@@ -87,7 +87,18 @@ export function GameForm({
   const nameOf = (id: number) => members.find((m) => m.id === id)?.name ?? `#${id}`;
   const canSubmit = complete && errors.length === 0;
 
-  const setRow = (index: number, patch: Partial<{ memberId: number; rawScore: string }>) => {
+  // チームごとの見た目。teams は2つ想定だが、増えても壊れないよう index で回す
+  const teamStyles = ["bg-sky-500", "bg-rose-500", "bg-emerald-500", "bg-amber-500"];
+  const teamIndex = (teamId: number | undefined) =>
+    teamId === undefined ? -1 : teams.findIndex((t) => t.id === teamId);
+  const teamOf = (memberId: number) => teams.find((t) => t.id === roster.get(memberId));
+  /** 選択肢に出す表示名。誰がどのチームかが**選ぶ前に**分かるようにする */
+  const optionLabel = (m: { id: number; name: string }) => {
+    const team = teamOf(m.id);
+    return team === undefined ? m.name : `${m.name}（${team.name}）`;
+  };
+
+  const setRow = (index: number, patch: Partial<GameFormRow>) => {
     const rows = value.rows.map((row, i) => (i === index ? { ...row, ...patch } : row));
     onChange({ ...value, rows });
   };
@@ -113,8 +124,17 @@ export function GameForm({
       <div className="mt-6 space-y-3">
         {value.rows.map((row, index) => (
           <div key={index} className="flex items-center gap-2">
+            {/* 選択済みのチームを色で示す。2-2 になっているかがひと目で分かる */}
+            <span
+              className={`h-9 w-1.5 shrink-0 rounded-full ${
+                teamIndex(roster.get(row.memberId)) >= 0
+                  ? teamStyles[teamIndex(roster.get(row.memberId)) % teamStyles.length]
+                  : "bg-border"
+              }`}
+              aria-hidden="true"
+            />
             <select
-              className={`border-input h-9 flex-1 rounded-lg border bg-transparent px-2 text-sm ${
+              className={`border-input h-9 min-w-0 flex-1 rounded-lg border bg-transparent px-2 text-sm ${
                 badMemberIds.has(row.memberId) ? "border-destructive" : ""
               }`}
               value={row.memberId}
@@ -122,22 +142,64 @@ export function GameForm({
               aria-label={`${index + 1}人目`}
             >
               <option value={0}>選択</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
+              {/* チームごとに分ける。あわせて名前にもチーム名を付ける。
+                  optgroup のラベルが出ない端末でも、選ぶ前にチームが分かるようにするため
+                  （利用者から「どのチームか分からず登録できない」と指摘があった箇所） */}
+              {teams.map((team) => (
+                <optgroup key={team.id} label={team.name}>
+                  {members
+                    .filter((m) => roster.get(m.id) === team.id)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {optionLabel(m)}
+                      </option>
+                    ))}
+                </optgroup>
               ))}
+              {/* どのチームにも属さないメンバー（名簿から外れた等）は最後に */}
+              {members.filter((m) => roster.get(m.id) === undefined).length > 0 ? (
+                <optgroup label="所属不明">
+                  {members
+                    .filter((m) => roster.get(m.id) === undefined)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                </optgroup>
+              ) : null}
             </select>
+            {/* 箱下は「たまに」なので、頻度の高い数字入力（テンキー）を優先し、
+                符号は専用ボタンで切り替える。inputMode="numeric" のテンキーには
+                「−」キーが無い端末が多く、そのままでは箱下を入力できない */}
+            <button
+              type="button"
+              onClick={() => setRow(index, { negative: !row.negative })}
+              aria-label={`${index + 1}人目の素点の符号（現在 ${row.negative ? "マイナス" : "プラス"}）`}
+              aria-pressed={row.negative}
+              className={`h-9 w-9 shrink-0 rounded-lg border text-base font-bold ${
+                row.negative
+                  ? "border-destructive text-destructive bg-destructive/10"
+                  : "border-input text-muted-foreground"
+              }`}
+            >
+              {row.negative ? "−" : "+"}
+            </button>
             <Input
-              // inputMode="numeric" はテンキーだけを出すので、多くの端末で
-              // 「−」が打てず箱下（負の素点）を入力できなくなる。
-              // 仕様は「負数OK・箱下精算あり」なので text にして自前で検証する。
-              inputMode="text"
+              inputMode="numeric"
               autoComplete="off"
               placeholder="素点"
-              className={`w-28 text-right ${badMemberIds.has(row.memberId) ? "border-destructive" : ""}`}
+              className={`w-24 text-right ${badMemberIds.has(row.memberId) ? "border-destructive" : ""}`}
               value={row.rawScore}
-              onChange={(e) => setRow(index, { rawScore: e.target.value })}
+              onChange={(e) => {
+                // PC で "-500" と打たれた場合も符号ボタン側に寄せる
+                const text = e.target.value;
+                if (text.startsWith("-")) {
+                  setRow(index, { rawScore: text.slice(1), negative: true });
+                } else {
+                  setRow(index, { rawScore: text });
+                }
+              }}
               aria-label={`${index + 1}人目の素点`}
             />
           </div>
@@ -187,10 +249,13 @@ export function GameForm({
         <ul className="text-destructive mt-4 space-y-1 text-sm">
           {shown.map((e, i) => {
             const who = e.memberIds.filter((id) => id > 0);
+            // 該当者が同じチームなら、チーム名を添える（どちらが多いか分かるように）
+            const teamNames = new Set(who.map((id) => teamOf(id)?.name).filter(Boolean));
+            const prefix = teamNames.size === 1 ? `${[...teamNames][0]}: ` : "";
             return (
               <li key={`${e.code}-${i}`}>
                 {e.message}
-                {who.length > 0 ? `（${who.map(nameOf).join("・")}）` : ""}
+                {who.length > 0 ? `（${prefix}${who.map(nameOf).join("・")}）` : ""}
               </li>
             );
           })}
