@@ -41,13 +41,34 @@ jq_field() { # jq_field <JSONパス式> — 標準入力の JSON から値を取
 # 自分が起動した wrangler の PID だけを落とす。
 # pkill でパターンに一致するプロセスを消すと、同じマシンで動いている
 # 他セッションの検証サーバーまで巻き込む（実際に巻き込んだ）。
+#
+# 落とし方には2つの罠がある（両方とも実測で踏んだ）。
+#   1. `W` はシェル関数なので `W dev ... &` の $! は**サブシェル**の PID。
+#      それを kill してもサブシェルが死ぬだけで、孫の workerd はポートを掴んだまま残る。
+#      → ジョブ制御 (`set -m`) を有効にしてプロセスグループごと落とす。
+#   2. 落ちたことを確認せずに次を起動すると、新しい wrangler はポートを取れずに死に、
+#      **古いワーカーが応答し続ける**。/api/health が 200 を返すので起動成功に見えるが、
+#      実際には env が切り替わっていない（「未設定 → 500」の検証が成立しなくなる）。
+#      → ポートが空くまで待ち、空かなければ落ちる。
+set -m
 WRANGLER_PID=""
+# lsof が無いと port_is_free が常に true になり、上の 2 を静かに見逃す。
+# 「検査が動いていないのに動いているように見える」のが一番まずいので先に落とす。
+command -v lsof >/dev/null 2>&1 || { echo "lsof がありません。ポートの解放を確認できないため中断します。"; exit 1; }
+port_is_free() { ! lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN >/dev/null 2>&1; }
 stop_worker() {
   if [ -n "$WRANGLER_PID" ]; then
-    kill "$WRANGLER_PID" >/dev/null 2>&1 || true
+    kill -TERM -- -"$WRANGLER_PID" >/dev/null 2>&1 || kill -TERM "$WRANGLER_PID" >/dev/null 2>&1 || true
     wait "$WRANGLER_PID" 2>/dev/null || true
     WRANGLER_PID=""
   fi
+  for _ in $(seq 1 30); do
+    port_is_free && return 0
+    sleep 1
+  done
+  echo "ポート ${PORT} を掴んだままのプロセスが残っています。中断します（他セッションを巻き込まないため pkill は使いません）。"
+  lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN 2>/dev/null | tail -n +2
+  exit 1
 }
 cleanup() {
   stop_worker
@@ -64,7 +85,6 @@ reset_db() {
 
 start_worker() { # $1: "with-secret" | "without-secret"
   stop_worker
-  sleep 2
   # --env-file を必ず渡す。省くと開発者の .dev.vars が自動で読まれてしまい、
   # 「シークレット未設定」の検証が成立しない（実測で確認）。
   local args=(dev --port "${PORT}" --persist-to "$PERSIST")
@@ -75,6 +95,7 @@ start_worker() { # $1: "with-secret" | "without-secret"
     : > .dev.vars.empty
     args+=(--env-file .dev.vars.empty)
   fi
+  port_is_free || { echo "起動前にポート ${PORT} が空いていません。"; exit 1; }
   W "${args[@]}" > "$LOG" 2>&1 &
   WRANGLER_PID=$!
   for _ in $(seq 1 40); do

@@ -1,0 +1,62 @@
+name: CI
+
+# 検査だけを行う。デプロイ（wrangler deploy）は T11 で追加する。
+# CLOUDFLARE_API_TOKEN を GitHub Secrets に登録する操作が必要で、それは運営が行うため。
+# このワークフローは secrets を一切参照しない（fork からの PR でも安全に走る）。
+on:
+  push:
+  pull_request:
+
+# 同じブランチに続けて push したら古い実行を止める
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # wrangler の利用統計送信を止める（初回に対話プロンプトが出るのを防ぐ）
+      WRANGLER_SEND_METRICS: false
+      # 検証サーバーのポート。8787 は開発機での手動確認に使うので避ける
+      PORT: 8791
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # package.json の packageManager と揃える
+          bun-version: 1.2.15
+
+      - name: 依存をインストール
+        run: bun install --frozen-lockfile
+
+      # 1つでも落ちたら後続は走らない（steps の既定の挙動）。
+      # vp check は警告があっても exit 0 を返すので、素で呼ばずラッパーを通す。
+      - name: 整形・lint・型チェック（警告も失敗）
+        run: bash scripts/check-strict.sh
+
+      - name: ユニットテスト
+        run: bun run test
+
+      # verify-api.sh も内部でビルドするが、こちらは単体で赤くするために残す
+      # （verify-api.sh 側はビルド出力を捨てるので、失敗の原因が読めない）
+      - name: ビルド
+        run: bun run build
+
+      # 実 HTTP + 実ローカル D1。--local / --persist-to のみで、--remote には触れない。
+      # Cloudflare の認証情報は不要（本番DBを一切見ない）。
+      - name: API の検証（wrangler dev + curl）
+        run: bash scripts/verify-api.sh
+
+      - name: 失敗したときにワーカーのログを出す
+        if: failure()
+        run: |
+          for f in "${TMPDIR:-/tmp}"/verify-api*.log; do
+            [ -f "$f" ] || continue
+            echo "----- $f -----"
+            tail -100 "$f"
+          done
