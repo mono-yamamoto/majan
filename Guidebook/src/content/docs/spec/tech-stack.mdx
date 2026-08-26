@@ -122,9 +122,10 @@ export default app;
       - games.ts POST / PATCH / 論理削除
   - migrations/ 0001_init.sql, 0002_....sql（wrangler d1 migrations が参照）
   - db/
-    - seed.sql 初期データ（メンバー10人・リーグ・チーム）
+    - seed.sql リーグとチーム（一発勝負・二重投入で落ちる）
+    - roster.sql メンバーと所属（何度でも流せる）
   - content/
-    - rules.md 対局ルール
+    - （content/ は作らない。対局ルールは src/features/rules/ の TSX に直接書く）
   - wrangler.jsonc Workers / D1 / Assets の定義
   - docs/
     - spec.md

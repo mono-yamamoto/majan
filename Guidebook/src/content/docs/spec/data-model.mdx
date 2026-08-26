@@ -48,7 +48,7 @@ erDiagram
     INTEGER id PK
     INTEGER league_id FK
     TEXT played_on "YYYY-MM-DD"
-    TEXT memo
+    TEXT title
     TEXT created_at "ISO8601 UTC"
     TEXT deleted_at "論理削除 / NULL"
   }
@@ -68,7 +68,7 @@ erDiagram
 | `teams` | リーグ内のチーム（2つ） | 運営がSQL直（wrangler） |
 | `members` | 人のマスタ（リーグ横断） | 運営がSQL直（wrangler） |
 | `league_members` | 誰がどのリーグのどのチームか | 運営がSQL直（wrangler） |
-| `games` | 半荘。日付・メモ・論理削除フラグ | **アプリ（入力係）** |
+| `games` | 半荘。日付・タイトル・論理削除フラグ | **アプリ（入力係）** |
 | `game_results` | 半荘ごとの4人の素点 | **アプリ（入力係）** |
 
 ## Postgres からの型の読み替え
@@ -134,7 +134,7 @@ CREATE TABLE games (
   id         INTEGER PRIMARY KEY,
   league_id  INTEGER NOT NULL REFERENCES leagues(id),
   played_on  TEXT    NOT NULL,
-  memo       TEXT,
+  title      TEXT,
   created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   deleted_at TEXT,
   -- YYYY-MM-DD の実在日付だけを許す（→ 日付の検証）
@@ -156,7 +156,9 @@ CREATE TABLE game_results (
   id        INTEGER PRIMARY KEY,
   game_id   INTEGER NOT NULL REFERENCES games(id),
   member_id INTEGER NOT NULL REFERENCES members(id),
-  raw_score INTEGER NOT NULL CHECK (raw_score % 100 = 0),
+  -- 予約（まだ対局していない半荘）は NULL。→ 予約と確定
+  -- CHECK は NULL のとき NULL を返す＝合格扱いなので、予約行はそのまま通る
+  raw_score INTEGER CHECK (raw_score % 100 = 0),
   UNIQUE (game_id, member_id)
 ) STRICT;
 
@@ -204,6 +206,36 @@ FOREIGN KEY (league_id, team_id) REFERENCES teams(league_id, id)
 
 <Aside type="caution" title="入れるなら 0001 のうちに">
 SQLite は `ALTER TABLE` で外部キーを追加できない。後から入れるには「新テーブル作成 → `INSERT INTO ... SELECT` → 旧テーブル DROP → RENAME」の再構築が要る。`0001_init.sql` が本番に適用される前が最後のタイミング。
+</Aside>
+
+## 予約と確定
+
+「次に誰が対局するか」を先に登録できる（**予約**）。対局が終わったら素点を埋めて**確定**する。
+
+予約も**4人が確定している必要がある**（2-2固定も守る）。決まっていないのは素点だけ。
+
+| 状態 | `game_results.raw_score` |
+|---|---|
+| **予約** | 4行すべて `NULL` |
+| **確定** | 4行すべて `NOT NULL` |
+| **不正** | 一部だけ `NULL`（APIが弾く） |
+
+`games` に状態カラムを持たせない。**「素点が入っているか」が状態そのもの**なので、二重に持つと食い違う余地ができる。
+
+<Aside type="caution" title="予約は集計に入れない">
+予約の半荘は **`scoreGame` に渡してはいけない**（素点が無いので pt を計算できない）。
+
+- `computeStats` は**予約を集計から除外**する。半荘数にも数えない
+- ただし**警告は出さない**。`broken`（4人ぶん揃っていない壊れたデータ）とは違い、**予約は正常な状態**
+- 一覧では「予定」として**確定済みとは分けて**表示する
+</Aside>
+
+<Aside type="note" title="なぜ raw_score を NULL 許容にしたか">
+`0` を「未入力」の印にはできない。**`0` は正当な素点**（箱下との区別もつかない）。
+
+別テーブル（`game_reservations` 等）にする案もあるが、**2-2固定・メンバー重複・リーグ所属のチェックが二重になる**うえ、予約→確定のときに DELETE + INSERT が必要になる。同じテーブルで素点だけ後から埋める方が、**既存の `PATCH`（全置換）がそのまま使える**。
+
+`NOT NULL` を外すのは `ALTER TABLE` ではできない（SQLite の制約）。**`0001_init.sql` が本番に適用される前が最後のタイミング**。
 </Aside>
 
 ## 日付の検証
@@ -258,8 +290,8 @@ D1 には対話的トランザクション（`BEGIN`〜`COMMIT`）が無く、�
 ```ts title="server/routes/games.ts"
 const db = c.env.DB;
 await db.batch([
-  db.prepare('INSERT INTO games (league_id, played_on, memo) VALUES (?1, ?2, ?3)')
-    .bind(input.leagueId, input.playedOn, input.memo ?? null),
+  db.prepare('INSERT INTO games (league_id, played_on, title) VALUES (?1, ?2, ?3)')
+    .bind(input.leagueId, input.playedOn, input.title ?? null),
   ...input.results.map((r) =>
     db.prepare(
       // batch 全体が1トランザクション＝他の書き込みは割り込めないので、
