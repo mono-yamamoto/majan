@@ -48,10 +48,9 @@ export function GameForm({
   const blanks = value.rows.filter(
     (row) => row.memberId === 0 || row.rawScore.trim() === "",
   ).length;
-  const nonNumeric = value.rows.filter(
-    (row) => row.rawScore.trim() !== "" && !Number.isFinite(Number(row.rawScore)),
-  ).length;
-  const complete = blanks === 0 && nonNumeric === 0;
+  // 中身が数字かどうかは validateGameInput が RAW_SCORE_NOT_A_NUMBER として
+  // 理由つきで返すので、ここで二重に判定しない（掟4）。ここは「入力し終わったか」だけ
+  const complete = blanks === 0;
 
   const errors = useMemo(
     () => (complete ? validateGameInput(input, rule, roster) : []),
@@ -71,10 +70,16 @@ export function GameForm({
     }
   }, [input, rule]);
 
-  const total = input.results.reduce(
-    (sum, r) => sum + (Number.isFinite(r.rawScore) ? r.rawScore : 0),
-    0,
+  // 未入力は 0 として足す（残り1人を暗算で埋める使い方ができる）。
+  // ただし「読めない値」が入っているときは合計を出さない。
+  // NaN を 0 として足すと、abc + 30000 + 20000 + 50000 で
+  // 「合計 100,000 / 100,000」と表示され、問題が無いように見えてしまう。
+  const unreadable = value.rows.some(
+    (row) => row.rawScore.trim() !== "" && !Number.isFinite(Number(row.rawScore)),
   );
+  const total = unreadable
+    ? null
+    : input.results.reduce((sum, r) => sum + (Number.isFinite(r.rawScore) ? r.rawScore : 0), 0);
   const expectedTotal = league.startPoint * 4;
   const shown = [...errors, ...(serverErrors ?? [])];
   // 未選択（0）は名前を出しようがないのでハイライトから外す
@@ -140,7 +145,7 @@ export function GameForm({
       </div>
 
       <p className="text-muted-foreground mt-2 text-right text-sm">
-        合計 {total.toLocaleString()} / {expectedTotal.toLocaleString()}
+        合計 {total === null ? "—" : total.toLocaleString()} / {expectedTotal.toLocaleString()}
       </p>
 
       <label className="mt-4 block">
@@ -174,9 +179,7 @@ export function GameForm({
 
       {/* 保存できない理由は常に見せる。押せないボタンだけでは何を直せばよいか分からない。
           ただし「まだ入力していない」と「入力が誤っている」は区別する */}
-      {nonNumeric > 0 ? (
-        <p className="text-destructive mt-4 text-sm">素点は数字で入力してください</p>
-      ) : blanks > 0 ? (
+      {blanks > 0 ? (
         <p className="text-muted-foreground mt-4 text-sm">
           あと {blanks} か所（メンバーと素点）を入力すると保存できます
         </p>
