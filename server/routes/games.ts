@@ -34,6 +34,12 @@ function parseGameInput(body: unknown): Parsed<GameInput> {
   if (rawTitle !== null && typeof rawTitle !== "string") {
     return { ok: false, error: "title must be a string or null" };
   }
+  // 前後の空白は落とす。一覧は trim して表示するので、落とさないと
+  // 保存した値と画面に出る値がずれる（原則5）。60文字の上限が
+  // 見えない空白を数えるのも、利用者から見て説明できない。
+  // 素点や playedOn には同じことをしない。playedOn は CHECK が前後空白を
+  // 弾く設計で、そちらは「直す」ではなく「弾く」が正しい。
+  const title = rawTitle === null ? null : rawTitle.trim();
 
   if (!Array.isArray(body.results)) {
     return { ok: false, error: "results must be an array" };
@@ -57,7 +63,7 @@ function parseGameInput(body: unknown): Parsed<GameInput> {
     results.push({ memberId, rawScore });
   }
 
-  return { ok: true, value: { playedOn: body.playedOn, title: rawTitle, results } };
+  return { ok: true, value: { playedOn: body.playedOn, title, results } };
 }
 
 /** POST は新規作成なので leagueId を受け取る（存在しなければ 404 で明示的に弾く） */

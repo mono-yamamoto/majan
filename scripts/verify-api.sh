@@ -246,6 +246,13 @@ POST_shape "title が空白だけも TITLE_REQUIRED" "TITLE_REQUIRED" \
   '[e["code"] for e in d["errors"]][-1]' \
   '{"leagueId":1,"playedOn":"2026-08-26","title":"  ","results":[{"memberId":1,"rawScore":42300},{"memberId":6,"rawScore":28100},{"memberId":2,"rawScore":18400},{"memberId":7,"rawScore":11200}]}'
 check "title 無しの3件は1件も書き込まれていない" "$(Q "SELECT COUNT(*) AS n FROM games;")" "$games_before_title"
+# 一覧は trim して表示するので、DB にも trim した値を入れる。
+# 揃えないと「保存した値」と「画面に出る値」がずれる。
+POST 201 'title の前後の空白は落として保存する' '{"leagueId":1,"playedOn":"2026-09-12","title":"  第9節  ","results":[{"memberId":1,"rawScore":42300},{"memberId":6,"rawScore":28100},{"memberId":2,"rawScore":18400},{"memberId":7,"rawScore":11200}]}'
+check "DB の title に前後の空白が無い" "$(Q "SELECT title FROM games WHERE played_on='2026-09-12';")" "第9節"
+check "中の空白は残る（正規化しすぎない）" "$(Q "SELECT COUNT(*) AS n FROM games WHERE played_on='2026-09-12' AND title = '第9節';")" "1"
+POST 201 'trim して 60 文字ちょうどなら通る（上限は見える文字数で数える）' "{\"leagueId\":1,\"playedOn\":\"2026-09-13\",\"title\":\"  $(head -c 60 /dev/zero | tr '\0' 'y')  \",\"results\":[{\"memberId\":1,\"rawScore\":42300},{\"memberId\":6,\"rawScore\":28100},{\"memberId\":2,\"rawScore\":18400},{\"memberId\":7,\"rawScore\":11200}]}"
+check "保存された長さが 60"                "$(Q "SELECT length(title) AS n FROM games WHERE played_on='2026-09-13';")" "60"
 
 echo; echo "===== 予約（素点が全部 null）====="
 POST_shape "予約でも title 無しは TITLE_REQUIRED" "TITLE_REQUIRED" \
