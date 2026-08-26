@@ -31,13 +31,17 @@ export function StandingsPage() {
   const nameOf = (id: number) => members.find((m) => m.id === id)?.name ?? `#${id}`;
   const teamNameOf = (id: number) => teams.find((t) => t.id === id)?.name ?? `#${id}`;
 
-  /** 半荘の通し番号を x 軸にする。日付だけだと同じ日の複数半荘が重なる */
+  /**
+   * 半荘の通し番号を x 軸にする（日付だけだと同じ日の複数半荘が重なる）。
+   * どの半荘を採点したかは computeStats が scoredGameIds で返すので、
+   * ここで条件を書き直さない（書き直すと状態が増えたときに食い違う）。
+   */
   const gameOrder = useMemo(() => {
-    const ordered = [...games]
-      .filter((g) => g.results.length === 4)
-      .sort((a, b) => (a.playedOn === b.playedOn ? a.id - b.id : a.playedOn < b.playedOn ? -1 : 1));
-    return new Map(ordered.map((g, i) => [g.id, { x: i + 1, label: g.playedOn }]));
-  }, [games]);
+    const dateOf = new Map(games.map((g) => [g.id, g.playedOn]));
+    return new Map(
+      stats.scoredGameIds.map((id, i) => [id, { x: i + 1, label: dateOf.get(id) ?? "" }]),
+    );
+  }, [games, stats.scoredGameIds]);
 
   const toSeries = (id: number, name: string, cumulative: CumulativePoint[]): ChartSeries => ({
     id,
@@ -59,7 +63,7 @@ export function StandingsPage() {
     [mode, stats.teams, ranked, gameOrder],
   );
 
-  const playedCount = games.filter((g) => g.results.length === 4).length;
+  const playedCount = stats.scoredGameIds.length;
 
   return (
     <section>
@@ -82,7 +86,13 @@ export function StandingsPage() {
 
       {playedCount === 0 ? (
         <div className="mt-6">
-          <p className="text-muted-foreground text-sm">まだ半荘がありません。</p>
+          <p className="text-muted-foreground text-sm">
+            {games.length === 0
+              ? "まだ半荘がありません。"
+              : stats.reservedGameIds.length === games.length
+                ? "まだ結果のある半荘がありません（予定のみ）。"
+                : "集計できる半荘がありません。"}
+          </p>
           <Link
             to={`/leagues/${leagueId}/games/new`}
             className="mt-3 inline-block text-sm underline"

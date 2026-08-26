@@ -73,7 +73,7 @@ function naiveStats(games: StatsGame[], rule: LeagueRule, memberId: number) {
   );
 
   for (const g of ordered) {
-    const scored = scoreGame(g.results, rule);
+    const scored = scoreGame(g.results as { memberId: number; rawScore: number }[], rule);
     for (const s of scored) {
       if (s.memberId !== memberId) continue;
       gameCount++;
@@ -141,7 +141,12 @@ describe("computeStats / 不変条件", () => {
 
     // 素朴に rank を足すと 10 x 半荘数 にならないことも示しておく
     const naiveRankSum = GAMES.reduce(
-      (sum, g) => sum + scoreGame(g.results, RULE).reduce((s, x) => s + x.rank, 0),
+      (sum, g) =>
+        sum +
+        scoreGame(g.results as { memberId: number; rawScore: number }[], RULE).reduce(
+          (s, x) => s + x.rank,
+          0,
+        ),
       0,
     );
     expect(naiveRankSum).toBeLessThan(10 * gameCount);
@@ -491,7 +496,9 @@ describe("computeStats / 4件でない半荘（broken）", () => {
   ];
 
   it("例外を投げずに集計できる（素朴に scoreGame へ渡すと RangeError で落ちる）", () => {
-    expect(() => scoreGame(BROKEN[1].results, RULE)).toThrow(RangeError);
+    expect(() =>
+      scoreGame(BROKEN[1].results as { memberId: number; rawScore: number }[], RULE),
+    ).toThrow(RangeError);
     expect(() => computeStats(BROKEN, ROSTER, RULE)).not.toThrow();
   });
 
@@ -518,6 +525,122 @@ describe("computeStats / 4件でない半荘（broken）", () => {
 
   it("健全なデータなら broken は空", () => {
     expect(computeStats(GAMES, ROSTER, RULE).broken).toEqual([]);
+  });
+});
+
+describe("computeStats / 予約（素点が全部 null）", () => {
+  const reservation = (id: number, playedOn: string): StatsGame => ({
+    id,
+    playedOn,
+    results: [1, 6, 2, 7].map((memberId) => ({ memberId, rawScore: null })),
+  });
+
+  const WITH_RESERVATION: StatsGame[] = [GAMES[0], reservation(90, "2026-09-10")];
+
+  it("予約は集計に入らない（半荘数にも数えない）", () => {
+    const { members } = computeStats(WITH_RESERVATION, ROSTER, RULE);
+    const m1 = members.find((m) => m.memberId === 1);
+    expect(m1?.gameCount).toBe(1);
+    expect(m1?.cumulative.map((c) => c.gameId)).toEqual([1]);
+  });
+
+  /**
+   * ★予約は broken に入れない★
+   * broken は「運営が直すべき異常」、予約は正常な状態。
+   * 混ぜると画面が「壊れています」と嘘をつく（原則5）。
+   */
+  it("予約は broken に入れない（正常な状態なので警告を出させない）", () => {
+    const { broken } = computeStats(WITH_RESERVATION, ROSTER, RULE);
+    expect(broken).toEqual([]);
+  });
+
+  it("予約だけなら全員が半荘数0で、broken も空", () => {
+    const { members, broken } = computeStats([reservation(90, "2026-09-10")], ROSTER, RULE);
+    expect(members.every((m) => m.gameCount === 0 && m.averagePt === null)).toBe(true);
+    expect(broken).toEqual([]);
+  });
+
+  it("予約を除外しても不変条件が成立する", () => {
+    const { members, teams, unassigned } = computeStats(WITH_RESERVATION, ROSTER, RULE);
+    expect(members.reduce((sum, m) => sum + deci(m.totalPt), 0)).toBe(0);
+    expect(members.reduce((sum, m) => sum + m.gameCount, 0)).toBe(4);
+    expect(teams.reduce((sum, t) => sum + deci(t.totalPt), 0) + deci(unassigned.totalPt)).toBe(0);
+  });
+
+  /** 素点が一部だけ入っている半荘は pt を計算できないので broken 扱い（API は弾くが SQL 直操作では作れる） */
+  it("素点が一部だけの半荘は broken に入れる（予約とは違い異常な状態）", () => {
+    const partial: StatsGame = {
+      id: 91,
+      playedOn: "2026-09-11",
+      results: [
+        { memberId: 1, rawScore: 25000 },
+        { memberId: 6, rawScore: null },
+        { memberId: 2, rawScore: null },
+        { memberId: 7, rawScore: null },
+      ],
+    };
+    const { broken } = computeStats([GAMES[0], partial], ROSTER, RULE);
+    expect(broken).toEqual([91]);
+  });
+
+  /**
+   * ★3区分は排他かつ網羅★
+   * どれにも入らない半荘が出たら分類漏れ。予約は「有効半荘数」に数えないが
+   * 「壊れた半荘」でもない、という区別が保たれていることを機械的に確認する。
+   */
+  it("scored + reserved + broken = 全件（排他かつ網羅）", () => {
+    const mixed: StatsGame[] = [
+      GAMES[0],
+      GAMES[1],
+      reservation(90, "2026-09-10"),
+      reservation(91, "2026-09-11"),
+      // 3人しかいない壊れた半荘
+      {
+        id: 92,
+        playedOn: "2026-09-12",
+        results: [1, 6, 2].map((m) => ({ memberId: m, rawScore: 25000 })),
+      },
+      // 素点が一部だけ
+      {
+        id: 93,
+        playedOn: "2026-09-13",
+        results: [
+          { memberId: 1, rawScore: 25000 },
+          { memberId: 6, rawScore: null },
+          { memberId: 2, rawScore: null },
+          { memberId: 7, rawScore: null },
+        ],
+      },
+    ];
+    const { scoredGameIds, reservedGameIds, broken } = computeStats(mixed, ROSTER, RULE);
+
+    expect(scoredGameIds.length + reservedGameIds.length + broken.length).toBe(mixed.length);
+    // 排他: 同じ id が2つの区分に入らない
+    const all = [...scoredGameIds, ...reservedGameIds, ...broken];
+    expect(new Set(all).size).toBe(all.length);
+    // 網羅: 元の id 集合と一致する
+    expect([...all].sort((a, b) => a - b)).toEqual(mixed.map((g) => g.id).sort((a, b) => a - b));
+
+    expect(scoredGameIds).toEqual([1, 2]);
+    expect(reservedGameIds).toEqual([90, 91]);
+    expect(broken).toEqual([92, 93]);
+  });
+
+  it("予約が混ざっていても不変条件が成立する", () => {
+    const mixed: StatsGame[] = [GAMES[0], GAMES[1], reservation(90, "2026-09-10")];
+    const { members, teams, unassigned, scoredGameIds } = computeStats(mixed, ROSTER, RULE);
+    expect(members.reduce((sum, m) => sum + deci(m.totalPt), 0)).toBe(0);
+    expect(members.reduce((sum, m) => sum + m.gameCount, 0)).toBe(4 * scoredGameIds.length);
+    expect(teams.reduce((sum, t) => sum + deci(t.totalPt), 0) + deci(unassigned.totalPt)).toBe(0);
+  });
+
+  it("scoredGameIds は playedOn → id 順（グラフの x 軸に使える）", () => {
+    const shuffled = [GAMES[3], GAMES[1], GAMES[0], GAMES[2]];
+    expect(computeStats(shuffled, ROSTER, RULE).scoredGameIds).toEqual([1, 2, 3, 4]);
+  });
+
+  it("予約を渡しても scoreGame が呼ばれず例外にならない", () => {
+    expect(() => computeStats([reservation(90, "2026-09-10")], ROSTER, RULE)).not.toThrow();
   });
 });
 

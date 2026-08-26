@@ -11,9 +11,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLeague } from "@/lib/league-context";
 import { scoreGame } from "@/lib/scoring";
+import { isScorable } from "@/lib/stats";
 import type { GameInput } from "@/lib/types";
 import { validateGameInput, type ValidationError } from "@/lib/validation";
-import { toGameInput, updateRow, type GameFormRow, type GameFormValue } from "./game-form-value";
+import {
+  hasPartialScores,
+  isReservationInput,
+  toGameInput,
+  updateRow,
+  type GameFormRow,
+  type GameFormValue,
+} from "./game-form-value";
 
 export function GameForm({
   value,
@@ -48,9 +56,15 @@ export function GameForm({
   const blanks = value.rows.filter(
     (row) => row.memberId === 0 || row.rawScore.trim() === "",
   ).length;
+  // 素点は「全部入れる」（確定）か「全部空」（予約）のどちらか。
+  // 「メンバーが未選択」と「素点が空」を分けて数える必要がある。
+  // 前者は予約でも埋まっていないといけないが、後者は予約なら空のままでよい。
+  const unselected = value.rows.filter((row) => row.memberId === 0).length;
+  const reservation = isReservationInput(value);
+  const partial = hasPartialScores(value);
   // 中身が数字かどうかは validateGameInput が RAW_SCORE_NOT_A_NUMBER として
-  // 理由つきで返すので、ここで二重に判定しない（掟4）。ここは「入力し終わったか」だけ
-  const complete = blanks === 0;
+  // 理由つきで返すので、ここで二重に判定しない（掟4）
+  const complete = unselected === 0 && (reservation || blanks === 0);
 
   const errors = useMemo(
     () => (complete ? validateGameInput(input, rule, roster) : []),
@@ -59,12 +73,15 @@ export function GameForm({
 
   // 全員そろって素点が数値になったときだけプレビューを出す（誤入力に気づける）
   const preview = useMemo(() => {
+    // 採点できるかの判定は stats.ts の isScorable に寄せる（条件が増えても1か所）。
+    // フォーム固有の条件（メンバー未選択・安全整数でない）だけここで足す。
     const ready =
-      input.results.length === 4 &&
-      input.results.every((r) => r.memberId > 0 && Number.isSafeInteger(r.rawScore));
+      isScorable(input, rule) &&
+      input.results.every((r) => r.memberId > 0 && Number.isSafeInteger(r.rawScore as number));
     if (!ready) return null;
     try {
-      return scoreGame(input.results, rule);
+      // ready のときだけ呼ぶ（予約は素点が無いので pt を計算できない）
+      return scoreGame(input.results as { memberId: number; rawScore: number }[], rule);
     } catch {
       return null;
     }
@@ -79,7 +96,10 @@ export function GameForm({
   );
   const total = unreadable
     ? null
-    : input.results.reduce((sum, r) => sum + (Number.isFinite(r.rawScore) ? r.rawScore : 0), 0);
+    : input.results.reduce(
+        (sum, r) => sum + (r.rawScore !== null && Number.isFinite(r.rawScore) ? r.rawScore : 0),
+        0,
+      );
   const expectedTotal = league.startPoint * 4;
   const shown = [...errors, ...(serverErrors ?? [])];
   // 未選択（0）は名前を出しようがないのでハイライトから外す
@@ -192,7 +212,9 @@ export function GameForm({
       </div>
 
       <p className="text-muted-foreground mt-2 text-right text-sm">
-        合計 {total === null ? "—" : total.toLocaleString()} / {expectedTotal.toLocaleString()}
+        {reservation
+          ? "素点は後から入力できます"
+          : `合計 ${total === null ? "—" : total.toLocaleString()} / ${expectedTotal.toLocaleString()}`}
       </p>
 
       <label className="mt-4 block">
@@ -226,9 +248,14 @@ export function GameForm({
 
       {/* 保存できない理由は常に見せる。押せないボタンだけでは何を直せばよいか分からない。
           ただし「まだ入力していない」と「入力が誤っている」は区別する */}
-      {blanks > 0 ? (
+      {unselected > 0 ? (
         <p className="text-muted-foreground mt-4 text-sm">
-          あと {blanks} か所（メンバーと素点）を入力すると保存できます
+          あと {unselected} 人を選ぶと保存できます（素点は空のままでも予約として登録できます）
+        </p>
+      ) : partial ? (
+        <p className="text-destructive mt-4 text-sm">
+          素点は4人ぶんすべて入力するか、すべて空にしてください
+          （すべて空にすると予約として登録されます）
         </p>
       ) : shown.length > 0 ? (
         <ul className="text-destructive mt-4 space-y-1 text-sm">
@@ -251,9 +278,16 @@ export function GameForm({
         <p className="text-destructive mt-4 text-sm">{extraMessage}</p>
       )}
 
+      {/* 「予約として保存される」ことをボタン自体に出す。
+          灰色のヒントだけだと、素点を入れ忘れたのか予約なのかが区別できない */}
       <Button type="submit" className="mt-6 w-full" disabled={pending || !canSubmit}>
-        {pending ? "保存中…" : submitLabel}
+        {pending ? "保存中…" : reservation ? `${submitLabel}（予約）` : submitLabel}
       </Button>
+      {reservation ? (
+        <p className="text-muted-foreground mt-2 text-center text-xs">
+          対局が終わったら、この半荘を編集して素点を入れると確定します
+        </p>
+      ) : null}
     </form>
   );
 }

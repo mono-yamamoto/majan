@@ -2,6 +2,9 @@ import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { useLeague } from "@/lib/league-context";
 import { scoreGame } from "@/lib/scoring";
+import { isReserved, isScorable } from "@/lib/stats";
+
+type Game = ReturnType<typeof useLeague>["games"][number];
 
 export function GamesPage() {
   const { games, members, league } = useLeague();
@@ -14,13 +17,32 @@ export function GamesPage() {
     [league],
   );
 
-  // 新しい半荘ほど上（入力直後の確認と、直近の修正が主な用途）
-  const ordered = useMemo(
+  // 予定は日付の近い順（古い順）。これから起きることなので、次にやるものが上に来る
+  const reservations = useMemo(
     () =>
-      [...games].sort((a, b) =>
-        a.playedOn === b.playedOn ? b.id - a.id : a.playedOn < b.playedOn ? 1 : -1,
-      ),
+      games
+        .filter(isReserved)
+        .sort((a, b) =>
+          a.playedOn === b.playedOn ? a.id - b.id : a.playedOn < b.playedOn ? -1 : 1,
+        ),
     [games],
+  );
+
+  // 確定済みは新しい半荘ほど上（入力直後の確認と、直近の修正が主な用途）
+  const finished = useMemo(
+    () =>
+      games
+        .filter((g) => !isReserved(g))
+        .sort((a, b) =>
+          a.playedOn === b.playedOn ? b.id - a.id : a.playedOn < b.playedOn ? 1 : -1,
+        ),
+    [games],
+  );
+
+  const editLink = (game: Game) => (
+    <Link to={`${base}/games/${game.id}/edit`} className="text-sm underline">
+      編集
+    </Link>
   );
 
   return (
@@ -35,61 +57,91 @@ export function GamesPage() {
         </Link>
       </div>
 
-      {ordered.length === 0 ? (
+      {games.length === 0 ? (
         <p className="text-muted-foreground mt-6 text-sm">
           まだ半荘がありません。「登録」から追加できます。
         </p>
-      ) : (
-        <ul className="mt-4 space-y-4">
-          {ordered.map((game) => {
-            // scoreGame は4件でないと RangeError を投げる（事前条件・T2）。
-            // games / game_results は運営が SQL で直接触れるので（決定#11）、
-            // 4件でない半荘は作れてしまう。ここで分岐しないと**一覧全体が落ちて**
-            // 閲覧者10人全員の画面が消える。壊れた行だけ出して他は通常どおり見せる。
-            if (game.results.length !== 4) {
-              return (
-                <li key={game.id} className="border-destructive rounded-lg border p-3">
-                  <div className="flex items-baseline justify-between">
-                    <span className="font-medium">{game.playedOn}</span>
-                    <span className="text-muted-foreground text-xs">#{game.id}</span>
-                  </div>
-                  <p className="text-destructive mt-2 text-sm">
-                    データ不整合（4人ぶんそろっていません: {game.results.length}人）。
-                    運営に連絡してください。
-                  </p>
-                </li>
-              );
-            }
-            const scored = scoreGame(game.results, rule);
-            return (
-              <li key={game.id} className="border-border rounded-lg border p-3">
+      ) : null}
+
+      {reservations.length > 0 ? (
+        <>
+          <h3 className="mt-6 font-bold">予定</h3>
+          <ul className="mt-2 space-y-3">
+            {reservations.map((game) => (
+              <li key={game.id} className="border-border bg-muted/40 rounded-lg border p-3">
                 <div className="flex items-baseline justify-between">
                   <span className="font-medium">{game.playedOn}</span>
-                  <Link to={`${base}/games/${game.id}/edit`} className="text-sm underline">
-                    編集
-                  </Link>
+                  {editLink(game)}
                 </div>
                 {game.memo === null ? null : (
                   <p className="text-muted-foreground mt-1 text-sm">{game.memo}</p>
                 )}
-                <ul className="mt-2 space-y-1 text-sm">
-                  {scored.map((s) => (
-                    <li key={s.memberId} className="flex justify-between tabular-nums">
-                      <span>
-                        {s.rank}位 {nameOf(s.memberId)}
-                      </span>
-                      <span>
-                        {s.rawScore.toLocaleString()} / {s.pt > 0 ? "+" : ""}
-                        {s.pt.toFixed(1)}pt
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                {/* 予約は pt・順位を持たないので、4人の名前と日付だけ */}
+                <p className="mt-2 text-sm">
+                  {game.results.map((r) => nameOf(r.memberId)).join("・")}
+                </p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  素点は未入力（編集して入れると確定します）
+                </p>
               </li>
-            );
-          })}
-        </ul>
-      )}
+            ))}
+          </ul>
+        </>
+      ) : null}
+
+      {finished.length > 0 ? (
+        <>
+          {reservations.length > 0 ? <h3 className="mt-6 font-bold">結果</h3> : null}
+          <ul className="mt-2 space-y-4">
+            {finished.map((game) => {
+              // scoreGame は4件そろって素点が全部入っているときだけ呼べる（事前条件・T2）。
+              // games / game_results は運営が SQL で直接触れるので（決定#11）、
+              // 条件を満たさない半荘は作れてしまう。ここで分岐しないと一覧全体が落ちる。
+              if (!isScorable(game, rule)) {
+                return (
+                  <li key={game.id} className="border-destructive rounded-lg border p-3">
+                    <div className="flex items-baseline justify-between">
+                      <span className="font-medium">{game.playedOn}</span>
+                      <span className="text-muted-foreground text-xs">#{game.id}</span>
+                    </div>
+                    <p className="text-destructive mt-2 text-sm">
+                      データ不整合（4人ぶんの素点がそろっていません）。運営に連絡してください。
+                    </p>
+                  </li>
+                );
+              }
+              const scored = scoreGame(
+                game.results as { memberId: number; rawScore: number }[],
+                rule,
+              );
+              return (
+                <li key={game.id} className="border-border rounded-lg border p-3">
+                  <div className="flex items-baseline justify-between">
+                    <span className="font-medium">{game.playedOn}</span>
+                    {editLink(game)}
+                  </div>
+                  {game.memo === null ? null : (
+                    <p className="text-muted-foreground mt-1 text-sm">{game.memo}</p>
+                  )}
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {scored.map((s) => (
+                      <li key={s.memberId} className="flex justify-between tabular-nums">
+                        <span>
+                          {s.rank}位 {nameOf(s.memberId)}
+                        </span>
+                        <span>
+                          {s.rawScore.toLocaleString()} / {s.pt > 0 ? "+" : ""}
+                          {s.pt.toFixed(1)}pt
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : null}
     </section>
   );
 }

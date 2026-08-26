@@ -18,7 +18,8 @@ export type StatsGame = {
   id: number;
   /** YYYY-MM-DD */
   playedOn: string;
-  results: Result[];
+  /** 素点。予約（次の対局を先に登録した状態）では全員 null */
+  results: { memberId: number; rawScore: number | null }[];
 };
 
 /** 累計pt推移の1点。x軸は playedOn → id の順 */
@@ -98,6 +99,29 @@ export type UnassignedStats = {
 
 const DECI_PER_PT = 10;
 
+/**
+ * 予約か。素点が1つも入っていない＝「次に誰が対局するか」だけ決まった状態。
+ * **正常な状態**なので、集計から外すが警告は出さない（broken とは違う）。
+ */
+export function isReserved(game: { results: { rawScore: number | null }[] }): boolean {
+  return game.results.length > 0 && game.results.every((r) => r.rawScore === null);
+}
+
+/**
+ * 集計（= scoreGame）に渡せる半荘か。
+ *
+ * 「人数がそろっている」「素点が全員ぶん入っている」の両方が要る。
+ * この判定は computeStats だけでなく画面側（一覧・戦績のグラフと件数）でも必要で、
+ * 各所に条件を書くと**予約のような新しい状態を足すたびに全箇所を洗う**ことになる。
+ * 1か所に置いて、条件が増えてもここだけ直せば全画面が追従するようにする。
+ */
+export function isScorable(
+  game: { results: { rawScore: number | null }[] },
+  rule: LeagueRule,
+): boolean {
+  return game.results.length === rule.uma.length && game.results.every((r) => r.rawScore !== null);
+}
+
 /** 半荘の並び順を playedOn → id で固定する。累計推移の x 軸はこの順序 */
 const byPlayedOnThenId = (a: StatsGame, b: StatsGame): number =>
   a.playedOn < b.playedOn ? -1 : a.playedOn > b.playedOn ? 1 : a.id - b.id;
@@ -159,13 +183,24 @@ export function computeStats(
   teams: TeamStats[];
   unassigned: UnassignedStats;
   broken: BrokenGames;
+  /** 実際に採点した半荘のID。playedOn → id 順。グラフの x 軸に使える */
+  scoredGameIds: number[];
+  /** 予約として除外した半荘のID。警告には使わない（正常な状態なので） */
+  reservedGameIds: number[];
 } {
-  // 4件でない半荘は scoreGame の事前条件を満たさないので集計から外す（→ BrokenGames）
-  const playersPerGame = rule.uma.length;
   const broken: BrokenGames = [];
+  const reserved: number[] = [];
   const ordered = [...games]
     .filter((g) => {
-      if (g.results.length === playersPerGame) return true;
+      // 予約は集計に入れないが broken には入れない。broken は「運営が直すべき異常」で、
+      // **予約は正常な状態**。混ぜると画面が「壊れています」と嘘をつく（原則5）。
+      if (isReserved(g)) {
+        reserved.push(g.id);
+        return false;
+      }
+      if (isScorable(g, rule)) return true;
+      // 人数が足りない／素点が一部だけ、は pt を計算できない異常
+      // （API が弾いているので通常は現れないが、運営の SQL 直操作では作れる）
       broken.push(g.id);
       return false;
     })
@@ -195,7 +230,8 @@ export function computeStats(
   }
 
   for (const game of ordered) {
-    const scored = scoreGame(game.results, rule);
+    // ここに来るのは4件そろって素点も全部入っている半荘だけ（上の filter が保証する）
+    const scored = scoreGame(game.results as Result[], rule);
     const occupied = occupiedRankTimesTwo(scored);
     const teamDeciThisGame = new Map<number, number>();
 
@@ -262,6 +298,8 @@ export function computeStats(
       totalPt: unassignedDeci / DECI_PER_PT,
     },
     broken: [...broken].sort((a, b) => a - b),
+    scoredGameIds: ordered.map((g) => g.id),
+    reservedGameIds: [...reserved].sort((a, b) => a - b),
   };
 }
 
