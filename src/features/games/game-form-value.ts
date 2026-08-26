@@ -34,18 +34,20 @@ export const emptyValue = (): GameFormValue => ({
 export const valueFromGame = (game: {
   playedOn: string;
   memo: string | null;
-  results: { memberId: number; rawScore: number }[];
+  /** 予約（素点未入力）では rawScore が null */
+  results: { memberId: number; rawScore: number | null }[];
 }): GameFormValue => ({
   playedOn: game.playedOn,
   memo: game.memo ?? "",
   // 一覧は順位順に出るので、編集画面も素点降順に揃える。
   // GET は member_id 順で返すため、そのまま並べると開いた瞬間に順番が変わって見える
   rows: [...game.results]
-    .sort((a, b) => b.rawScore - a.rawScore || a.memberId - b.memberId)
+    // 予約（素点が null）は並べ替えようがないので memberId 順のまま
+    .sort((a, b) => (b.rawScore ?? 0) - (a.rawScore ?? 0) || a.memberId - b.memberId)
     .map((r) => ({
       memberId: r.memberId,
-      rawScore: String(Math.abs(r.rawScore)),
-      negative: r.rawScore < 0,
+      rawScore: r.rawScore === null ? "" : String(Math.abs(r.rawScore)),
+      negative: r.rawScore !== null && r.rawScore < 0,
     })),
 });
 
@@ -60,10 +62,25 @@ export function toGameInput(value: GameFormValue): GameInput {
     memo: value.memo.trim() === "" ? null : value.memo,
     results: value.rows.map((row) => ({
       memberId: row.memberId,
-      rawScore:
-        row.rawScore.trim() === "" ? Number.NaN : (row.negative ? -1 : 1) * Number(row.rawScore),
+      // 空欄は null（予約）として渡す。全部空なら予約、全部数値なら確定、
+      // 混在は validateGameInput が MIXED_SCORES で弾く
+      rawScore: row.rawScore.trim() === "" ? null : (row.negative ? -1 : 1) * Number(row.rawScore),
     })),
   };
+}
+
+/** 4人そろっていて素点が1つも入っていない = 予約として登録できる状態 */
+export function isReservationInput(value: GameFormValue): boolean {
+  return (
+    value.rows.length === 4 &&
+    value.rows.every((row) => row.memberId > 0 && row.rawScore.trim() === "")
+  );
+}
+
+/** 素点が一部だけ入っている = 予約でも確定でもない */
+export function hasPartialScores(value: GameFormValue): boolean {
+  const filled = value.rows.filter((row) => row.rawScore.trim() !== "").length;
+  return filled > 0 && filled < value.rows.length;
 }
 
 /**

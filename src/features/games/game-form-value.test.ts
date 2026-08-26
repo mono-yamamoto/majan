@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { toGameInput, updateRow, valueFromGame, type GameFormRow } from "./game-form-value";
+import {
+  hasPartialScores,
+  isReservationInput,
+  toGameInput,
+  updateRow,
+  valueFromGame,
+  type GameFormRow,
+} from "./game-form-value";
 
 const row = (patch: Partial<GameFormRow> = {}): GameFormRow => ({
   memberId: 1,
@@ -63,13 +70,54 @@ describe("toGameInput / 符号の扱い", () => {
     expect(input.memo).toBeNull();
   });
 
-  it("未入力は NaN のまま渡す（validateGameInput が理由つきで弾く）", () => {
+  it("空欄は null（予約）として渡す", () => {
     const input = toGameInput({
       playedOn: "2026-08-26",
       memo: "",
       rows: [row({ rawScore: "" })],
     });
-    expect(Number.isNaN(input.results[0].rawScore)).toBe(true);
+    expect(input.results[0].rawScore).toBeNull();
+  });
+
+  it("数字でない文字列は NaN のまま渡す（validateGameInput が理由つきで弾く）", () => {
+    const input = toGameInput({
+      playedOn: "2026-08-26",
+      memo: "",
+      rows: [row({ rawScore: "abc" })],
+    });
+    expect(Number.isNaN(input.results[0].rawScore as number)).toBe(true);
+  });
+});
+
+describe("予約かどうかの判定", () => {
+  const four = (scores: string[]) =>
+    scores.map((rawScore, i) => row({ memberId: i + 1, rawScore }));
+
+  it("4人そろっていて素点が全部空なら予約", () => {
+    expect(
+      isReservationInput({ playedOn: "2026-08-26", memo: "", rows: four(["", "", "", ""]) }),
+    ).toBe(true);
+  });
+
+  it("メンバーが未選択なら予約にならない（誰が対局するかが目的なので）", () => {
+    const rows = four(["", "", "", ""]);
+    rows[0].memberId = 0;
+    expect(isReservationInput({ playedOn: "2026-08-26", memo: "", rows })).toBe(false);
+  });
+
+  it("素点が1つでも入っていれば予約ではない", () => {
+    expect(
+      isReservationInput({ playedOn: "2026-08-26", memo: "", rows: four(["25000", "", "", ""]) }),
+    ).toBe(false);
+  });
+
+  it("一部だけ入っている状態を検出できる", () => {
+    const partial = { playedOn: "2026-08-26", memo: "", rows: four(["25000", "", "", ""]) };
+    const all = { playedOn: "2026-08-26", memo: "", rows: four(["1", "2", "3", "4"]) };
+    const none = { playedOn: "2026-08-26", memo: "", rows: four(["", "", "", ""]) };
+    expect(hasPartialScores(partial)).toBe(true);
+    expect(hasPartialScores(all)).toBe(false);
+    expect(hasPartialScores(none)).toBe(false);
   });
 });
 
@@ -87,6 +135,33 @@ describe("valueFromGame / 既存データの読み込み", () => {
     });
     const negativeRow = value.rows.find((r) => r.memberId === 7);
     expect(negativeRow).toEqual({ memberId: 7, rawScore: "10000", negative: true });
+  });
+
+  /**
+   * ★DB で null と 0 を分けたのに、フォームに読み込む段で潰れる罠★
+   * String(Math.abs(null)) は "0" になる。予約を開くと「全員0点」が入り、
+   * そのまま保存すると合計0で弾かれるか、最悪「全員0点の確定」に化ける。
+   * 0 は正当な素点なので、未入力の印には使えない。
+   */
+  it("予約（rawScore が null）は空文字で読み込む。0 を入れない", () => {
+    const value = valueFromGame({
+      playedOn: "2026-09-10",
+      memo: null,
+      results: [1, 6, 2, 7].map((memberId) => ({ memberId, rawScore: null })),
+    });
+    expect(value.rows.map((r) => r.rawScore)).toEqual(["", "", "", ""]);
+    expect(value.rows.every((r) => r.negative === false)).toBe(true);
+    // 読み込んだ値をそのまま戻すと、予約のまま（全員 null）
+    expect(toGameInput(value).results.every((r) => r.rawScore === null)).toBe(true);
+  });
+
+  it("予約を読み込んでも memberId は保たれる（誰が対局するかが目的）", () => {
+    const value = valueFromGame({
+      playedOn: "2026-09-10",
+      memo: null,
+      results: [1, 6, 2, 7].map((memberId) => ({ memberId, rawScore: null })),
+    });
+    expect([...value.rows.map((r) => r.memberId)].sort((a, b) => a - b)).toEqual([1, 2, 6, 7]);
   });
 
   it("行を素点降順に並べる（一覧の順位順と一致させる）", () => {
