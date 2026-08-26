@@ -242,7 +242,13 @@ wrangler d1 execute majan --local --file=./db/seed.local.sql
 
 **開幕前なら何度でも変えられる。** 半荘を登録した後は注意（下の警告）。
 
-やり方は2つ。**Cloudflare のダッシュボードが一番手軽**。
+やり方は3つ。**`member_id` を調べるのが面倒なら運営メニューが速い。**
+
+<Aside type="tip" title="運営メニューで SQL を作れる">
+`/leagues/:id/admin`（→ [運営メニュー](/spec/features/#運営メニューsql-を生成するだけの画面)）で**名簿を編集すると、実行すべき SQL がまとめて出る**。ID を調べる必要が無く、変更後の人数の予測と確認クエリも一緒に出る。
+
+**実行はしない**ので、出た SQL を下のどちらかの方法で流す。
+</Aside>
 
 <Tabs>
   <TabItem label="ダッシュボード（おすすめ）">
