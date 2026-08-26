@@ -310,6 +310,76 @@ describe("computeStats / チーム集計", () => {
   });
 });
 
+describe("computeStats / roster に無いメンバー（unassigned）", () => {
+  /** 4人目がリーグ名簿に載っていない半荘。所属を外されたあとに過去の半荘が残るケース */
+  const STRAY_GAMES: StatsGame[] = [
+    game(1, "2026-08-26", [
+      [1, 42300],
+      [6, 28100],
+      [2, 18400],
+      [99, 11200],
+    ]),
+  ];
+
+  it("健全なら unassigned は空で合計 0", () => {
+    const { unassigned } = computeStats(GAMES, ROSTER, RULE);
+    expect(unassigned.memberIds).toEqual([]);
+    expect(unassigned.totalPt).toBe(0);
+  });
+
+  it("所属の引けないメンバーは個人成績には出るが、チーム集計には入らない", () => {
+    const { members, teams, unassigned } = computeStats(STRAY_GAMES, ROSTER, RULE);
+
+    const stray = members.find((m) => m.memberId === 99);
+    expect(stray?.gameCount).toBe(1);
+    expect(stray?.totalPt).toBe(-48.8);
+
+    expect(unassigned.memberIds).toEqual([99]);
+    expect(deci(unassigned.totalPt)).toBe(deci(stray?.totalPt ?? 0));
+
+    // チーム集計には 99 のぶんが入っていない
+    const teamSum = teams.reduce((sum, t) => sum + deci(t.totalPt), 0);
+    expect(teamSum).not.toBe(0);
+  });
+
+  /**
+   * ★これが unassigned を分けて返す理由★
+   * Σ(チーム合計) だけを見ると 0 にならないが、それが画面から分からない状態になる。
+   * unassigned を足せば必ず 0 になるので、壊れていることを検知できる。
+   */
+  it("Σ(チーム合計pt) + unassigned の合計pt = 0（deci 整数で厳密に）", () => {
+    for (const games of [GAMES, STRAY_GAMES]) {
+      const { teams, unassigned } = computeStats(games, ROSTER, RULE);
+      const total = teams.reduce((sum, t) => sum + deci(t.totalPt), 0) + deci(unassigned.totalPt);
+      expect(total).toBe(0);
+    }
+  });
+
+  it("個人成績側の Σ合計pt は unassigned がいても 0 のまま", () => {
+    const { members } = computeStats(STRAY_GAMES, ROSTER, RULE);
+    expect(members.reduce((sum, m) => sum + deci(m.totalPt), 0)).toBe(0);
+  });
+
+  it("unassigned は memberId 昇順で重複しない", () => {
+    const games: StatsGame[] = [
+      game(1, "2026-08-26", [
+        [1, 42300],
+        [98, 28100],
+        [99, 18400],
+        [97, 11200],
+      ]),
+      game(2, "2026-08-27", [
+        [1, 42300],
+        [99, 28100],
+        [98, 18400],
+        [97, 11200],
+      ]),
+    ];
+    const { unassigned } = computeStats(games, ROSTER, RULE);
+    expect(unassigned.memberIds).toEqual([97, 98, 99]);
+  });
+});
+
 describe("computeStats / 削除済み半荘は入力の時点で除外されている前提", () => {
   it("渡さなかった半荘は集計に現れない", () => {
     const withAll = computeStats(GAMES, ROSTER, RULE).members.find((m) => m.memberId === 1);

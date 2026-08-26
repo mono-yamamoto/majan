@@ -61,6 +61,27 @@ export type TeamStats = {
   cumulative: CumulativePoint[];
 };
 
+/**
+ * どのチームにも紐づかなかったぶんの集計。
+ *
+ * `roster` に無い memberId が半荘に現れると（リーグを外れた人の過去の半荘が残る等）、
+ * その人の pt はチーム合計のどこにも入らない。そのまま表示すると
+ * **チーム合計の和が 0 にならないのに、それが画面から分からない**状態になる。
+ *
+ * ここに分けて返すことで
+ *   Σ(teams[].totalPt) + unassigned.totalPt = 0
+ * が不変条件として成立し、`memberIds` が空でなければ壊れていると検知できる。
+ *
+ * 個人成績（`members`）には通常どおり含まれるので、`MemberStats` を重複して持たない。
+ * 全項目が要るなら `members` から memberId で引けばよく、二重に持つと食い違う余地ができる。
+ */
+export type UnassignedStats = {
+  /** 所属が引けなかったメンバー。空配列なら健全 */
+  memberIds: number[];
+  /** それらの合計pt */
+  totalPt: number;
+};
+
 const DECI_PER_PT = 10;
 
 /** 半荘の並び順を playedOn → id で固定する。累計推移の x 軸はこの順序 */
@@ -112,13 +133,14 @@ const emptyAccumulator = (): Accumulator => ({
  * その日に来なかった人もそのままなので、未出場者は例外ではなく通常の状態。
  *
  * `roster` に無い memberId が半荘に現れた場合（所属を外されたあとに過去の半荘が残る等）も
- * 個人成績としては集計する。ただしチームが決まらないので**チーム集計には入らない**。
+ * 個人成績としては集計する。ただしチームが決まらないので**チーム集計には入らない**ので、
+ * そのぶんは `unassigned` に分けて返す（→ {@link UnassignedStats}）。
  */
 export function computeStats(
   games: StatsGame[],
   roster: Roster,
   rule: LeagueRule,
-): { members: MemberStats[]; teams: TeamStats[] } {
+): { members: MemberStats[]; teams: TeamStats[]; unassigned: UnassignedStats } {
   const ordered = [...games].sort(byPlayedOnThenId);
 
   const acc = new Map<number, Accumulator>();
@@ -132,6 +154,9 @@ export function computeStats(
   };
   // 未出場でも必ず結果に出す
   for (const memberId of roster.keys()) ensure(memberId);
+
+  let unassignedDeci = 0;
+  const unassignedIds = new Set<number>();
 
   const teamAcc = new Map<
     number,
@@ -165,6 +190,9 @@ export function computeStats(
       const teamId = roster.get(s.memberId);
       if (teamId !== undefined) {
         teamDeciThisGame.set(teamId, (teamDeciThisGame.get(teamId) ?? 0) + ptDeci);
+      } else {
+        unassignedDeci += ptDeci;
+        unassignedIds.add(s.memberId);
       }
     }
 
@@ -194,7 +222,14 @@ export function computeStats(
     }))
     .sort((a, b) => a.teamId - b.teamId);
 
-  return { members, teams };
+  return {
+    members,
+    teams,
+    unassigned: {
+      memberIds: [...unassignedIds].sort((a, b) => a - b),
+      totalPt: unassignedDeci / DECI_PER_PT,
+    },
+  };
 }
 
 function finalize(memberId: number, a: Accumulator): MemberStats {
