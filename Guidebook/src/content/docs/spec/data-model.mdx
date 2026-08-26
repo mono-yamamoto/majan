@@ -305,7 +305,7 @@ RLS は無くなったので、APIサーバーのミドルウェアで代替す�
 
 | メソッド | 対象 | 制御 |
 |---|---|---|
-| `GET /api/**` | 閲覧全般 | **誰でも可**（認証なし） |
+| `GET /api/leagues`<br/>`GET /api/leagues/:id` | 閲覧全般 | **誰でも可**（認証なし） |
 | `POST /api/games`<br/>`PATCH /api/games/:id`<br/>`PATCH /api/games/:id/deleted` | 半荘の登録・修正（全置換）・論理削除 | **`X-Passcode` ヘッダが `WRITE_PASSCODE` と一致した時だけ通す**（→ [APIの形](/spec/features/#apiの形)） |
 | `DELETE` | – | **エンドポイントを作らない**（論理削除のみ。事故防止） |
 | 運営系テーブル | `leagues` `teams` `members` `league_members` | **書き込みAPIを作らない**。`wrangler d1 execute` でのSQL直操作のみ |
