@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "majan",
+  "main": "server/index.ts",
+  "compatibility_date": "2026-08-25",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "majan",
+      // TODO(T1): `wrangler d1 create majan` で発行されたIDに差し替える
+      "database_id": "00000000-0000-0000-0000-000000000000",
+    },
+  ],
+}

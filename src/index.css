@@ -1,0 +1,2 @@
+/* スキャン対象を src/ 配下に限定する（既定だとリポジトリ全体＝Guidebook まで走査してしまう） */
+@import "tailwindcss" source('.');
