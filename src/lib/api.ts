@@ -52,6 +52,9 @@ export type LeagueResponse = {
   }[];
 };
 
+/** トップのリーグ選択用。設定値やメンバーは選択後に fetchLeague で取る */
+export type LeagueSummary = { id: number; name: string };
+
 export type GameRequest = {
   playedOn: string;
   memo: string | null;
@@ -167,6 +170,10 @@ async function writeOnce<T>(
 }
 
 // --- 公開 API ----------------------------------------------------------------
+
+/** リーグの一覧（id と name だけ）。トップのリーグ選択で使う */
+export const fetchLeagues = (): Promise<ApiResult<{ leagues: LeagueSummary[] }>> =>
+  request<{ leagues: LeagueSummary[] }>("GET", "/api/leagues");
 
 /** リーグ設定・チーム・メンバー・全半荘を1回で取得する（決定#14。追加の往復を作らない） */
 export const fetchLeague = (leagueId: number): Promise<ApiResult<LeagueResponse>> =>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useParams } from "react-router";
+import { LeagueIndex } from "@/components/LeagueIndex";
 import { PasscodeDialog } from "@/components/PasscodeDialog";
 import { Button } from "@/components/ui/button";
 import { EditGamePage } from "@/features/games/EditGamePage";
@@ -11,17 +12,10 @@ import { StandingsPage } from "@/features/standings/StandingsPage";
 import { LeagueProvider } from "@/components/LeagueProvider";
 import { useLeague } from "@/lib/league-context";
 
-/**
- * 既定のリーグ。リーグ一覧を返す API が無いので（GET は /api/leagues/:id だけ）、
- * トップはここへ送る。URL に leagueId を残してあるので、シーズンが変わって
- * リーグが増えても /leagues/2/... で開ける。
- */
-const DEFAULT_LEAGUE_ID = 1;
-
 function Header() {
   const { league } = useLeague();
   const { leagueId } = useParams();
-  const base = `/leagues/${leagueId ?? DEFAULT_LEAGUE_ID}`;
+  const base = `/leagues/${leagueId}`;
   const [passcodeOpen, setPasscodeOpen] = useState(false);
 
   return (
@@ -68,7 +62,7 @@ export function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to={`/leagues/${DEFAULT_LEAGUE_ID}`} replace />} />
+        <Route path="/" element={<LeagueIndex />} />
         <Route
           path="/leagues/:leagueId"
           element={

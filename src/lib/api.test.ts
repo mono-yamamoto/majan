@@ -110,11 +110,48 @@ describe("api / レスポンスの判別", () => {
   });
 });
 
+describe("api / リーグ一覧", () => {
+  it("0件でもエラーにせず空配列を返す（seed 未投入は『まだ無い』状態）", async () => {
+    stubFetch(200, { leagues: [] }, 0);
+    const { fetchLeagues } = await import("./api");
+    const result = await fetchLeagues();
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.leagues).toEqual([]);
+    vi.unstubAllGlobals();
+  });
+
+  it("複数件をそのまま返す", async () => {
+    stubFetch(
+      200,
+      {
+        leagues: [
+          { id: 1, name: "A" },
+          { id: 2, name: "B" },
+        ],
+      },
+      0,
+    );
+    const { fetchLeagues } = await import("./api");
+    const result = await fetchLeagues();
+    if (result.ok) expect(result.data.leagues.map((l) => l.id)).toEqual([1, 2]);
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("api / X-Passcode の付与", () => {
   it("書き込みには付く", async () => {
     const calls = stubFetch(201, { id: 1 }, 0);
     await createGame(1, INPUT, "secret");
     expect((calls[0].init.headers as Record<string, string>)["X-Passcode"]).toBe("secret");
+    vi.unstubAllGlobals();
+  });
+
+  it("リーグ一覧の GET にも付けない", async () => {
+    const calls = stubFetch(200, { leagues: [] }, 0);
+    const { fetchLeagues } = await import("./api");
+    await fetchLeagues();
+    expect(calls[0].url).toBe("/api/leagues");
+    expect((calls[0].init.headers as Record<string, string>)["X-Passcode"]).toBeUndefined();
     vi.unstubAllGlobals();
   });
 
