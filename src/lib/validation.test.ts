@@ -15,7 +15,7 @@ const RULE: LeagueRule = {
   uma: [30, 10, -10, -30],
 };
 
-/** チームA = 1..5（team 1）/ チームB = 6..10（team 2）。db/seed.sql と同じ構成 */
+/** チームA = 1..5（team 1）/ チームB = 6..10（team 2）。db/roster.sql と同じ構成 */
 const ROSTER: Roster = new Map([
   [1, 1],
   [2, 1],

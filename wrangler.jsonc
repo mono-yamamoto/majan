@@ -3,6 +3,16 @@
   "name": "majan",
   "main": "server/index.ts",
   "compatibility_date": "2026-08-25",
+
+  // 既定に頼らず明示する（既定値が変わったときに黙って挙動が変わらないように）。
+  // workers.dev のURLがそのままメンバーに配るURL。
+  "workers_dev": true,
+  // プレビューURLは無効にする。
+  // version ごとに **認証なしで誰でも見られる別URL** が生えるが、このアプリの
+  // GET には認証が無く、本番DBにはメンバーの実名が入っている。実名を git に
+  // 残さない運用（D-10 / D-11）をしているのに、消しにくい公開URLが増えるのは筋が通らない。
+  // デプロイ前の確認は `bun run preview`（手元で build して wrangler dev）と CI で足りる。
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",

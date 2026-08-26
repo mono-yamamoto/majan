@@ -1,8 +1,9 @@
 name: CI
 
-# 検査だけを行う。デプロイ（wrangler deploy）は T11 で追加する。
-# CLOUDFLARE_API_TOKEN を GitHub Secrets に登録する操作が必要で、それは運営が行うため。
-# このワークフローは secrets を一切参照しない（fork からの PR でも安全に走る）。
+# 検査だけを行う。**自動デプロイは入れていない**（手元から `bun run deploy` する）。
+# 入れるなら CLOUDFLARE_API_TOKEN を GitHub Secrets に登録する必要があり、
+# public リポジトリでトークンを扱う判断が別途要るため、未導入のままにしている。
+# いまのところ、このワークフローは secrets を一切参照しない（fork からの PR でも安全に走る）。
 on:
   push:
   pull_request:

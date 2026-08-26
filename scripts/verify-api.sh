@@ -7,7 +7,7 @@
 # ローカルDBを作り直し、wrangler dev を起動し、curl で全経路を叩いて後片付けまで行う。
 # --remote には一切触れない。本番DBは使わない。
 #
-# 前提: bun install 済み。ポート 8787 が空いていること。
+# 前提: bun install 済み。ポート 8791（PORT で変更可）が空いていること。
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
