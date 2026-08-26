@@ -20,8 +20,9 @@ coverage/
 .dev.vars.*
 !.dev.vars.example
 
-# 実名入りの seed（テンプレートは db/seed.sql をコミットする / 決定 D-10）
+# 実名入りの初期データ（テンプレートは db/seed.sql と db/roster.sql をコミットする / 決定 D-10）
 db/seed.local.sql
+db/roster.local.sql
 
 # D1 backups (wrangler d1 export)
 backups/

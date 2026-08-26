@@ -1,24 +1,29 @@
--- 初期データの「形を示すテンプレート」。名前はすべてプレースホルダ（決定 D-10）。
+-- リーグとチームの「箱」を作る。**一番最初に1回だけ**流す。
 --
--- 実際のメンバーの氏名はこのファイルに書かない。運営が db/seed.local.sql を作り、
--- そちらを本番へ流す（決定 D-11: seed.local.sql は運営本人が作成し、実名は
--- 開発者にも渡さない）。seed.local.sql は .gitignore 済みで git 履歴には残らない。
+-- 名簿（メンバーと所属）は db/roster.sql の方。分けている理由は下の
+-- 「二重投入の扱いが逆になっている理由」を読むこと。
 --
 -- 運営の手順:
 --   1. cp db/seed.sql db/seed.local.sql
---   2. seed.local.sql の members の名前を実名に書き換える
---      （リーグ名・チーム名も必要なら変える。id と件数は変えない）
---   3. 流す
---        wrangler d1 execute majan --local  --file=./db/seed.local.sql
---        wrangler d1 execute majan --remote --file=./db/seed.local.sql   # 本番（T11）
---   4. 確認（チームごとに5人ずつ、team が同じリーグのものになっていること）
---        wrangler d1 execute majan --remote --command \
---          "SELECT t.name, COUNT(*) AS n, SUM(t.league_id <> lm.league_id) AS wrong_league \
---           FROM league_members lm JOIN teams t ON t.id = lm.team_id GROUP BY t.id;"
+--      （リーグ名・チーム名を変えるなら編集する。id と件数は変えない）
+--   2. wrangler d1 execute majan --local  --file=./db/seed.local.sql
+--      wrangler d1 execute majan --remote --file=./db/seed.local.sql   # 本番
+--   3. 続けて db/roster.sql の手順へ
 --
--- id を明示しているので、二重に流すと UNIQUE constraint failed で落ちる。
--- 「投入済みのDBを黙って壊さない」ための安全側の挙動なので、
--- INSERT OR IGNORE や ON CONFLICT には**しないこと**。
+-- ---------------------------------------------------------------------------
+-- 二重投入の扱いが逆になっている理由（seed.sql と roster.sql）
+--
+--   seed.sql  : id を明示していて、**二重投入すると UNIQUE constraint failed で落ちる**。
+--               リーグやチームを二重に作る事故は、あとから気づいても直しにくい
+--               （半荘がぶら下がっている可能性がある）。落ちる方が安全。
+--               INSERT OR IGNORE や ON CONFLICT には**しないこと**。
+--
+--   roster.sql: **何度でも流せる**（INSERT OR REPLACE）。
+--               チーム分けは開幕前に確定するので、決まるまで
+--               「直して流し直す」ができる必要がある。
+--
+-- 目的が違うので挙動も違う。片方に合わせないこと。
+-- ---------------------------------------------------------------------------
 
 INSERT INTO leagues (id, name, start_point, return_point, uma_1st, uma_2nd, uma_3rd, uma_4th)
 VALUES (1, '2026 秋リーグ', 25000, 30000, 30, 10, -10, -30);
@@ -26,11 +31,3 @@ VALUES (1, '2026 秋リーグ', 25000, 30000, 30, 10, -10, -30);
 INSERT INTO teams (id, league_id, name) VALUES
   (1, 1, 'チームA'),
   (2, 1, 'チームB');
-
-INSERT INTO members (id, name) VALUES
-  (1,'山田'), (2,'佐藤'), (3,'鈴木'), (4,'田中'), (5,'高橋'),
-  (6,'伊藤'), (7,'渡辺'), (8,'中村'), (9,'小林'), (10,'加藤');
-
-INSERT INTO league_members (league_id, member_id, team_id) VALUES
-  (1,1,1), (1,2,1), (1,3,1), (1,4,1), (1,5,1),   -- チームA
-  (1,6,2), (1,7,2), (1,8,2), (1,9,2), (1,10,2);  -- チームB
