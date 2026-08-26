@@ -1,0 +1,4 @@
+# wrangler dev がローカルで読むシークレット。コピーして .dev.vars を作る。
+#   cp .dev.vars.example .dev.vars
+# 本番は wrangler secret put WRITE_PASSCODE で登録する（このファイルには本物を書かない）。
+WRITE_PASSCODE=""
