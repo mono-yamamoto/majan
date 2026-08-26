@@ -6,6 +6,25 @@ import { isReserved, isScorable } from "@/lib/stats";
 
 type Game = ReturnType<typeof useLeague>["games"][number];
 
+/**
+ * 半荘の見出し。タイトルが主、日付が従。
+ * タイトルが空なら日付を大きく出す（タイトル欄のために空行を作らない）。
+ * 運営が SQL で空文字を入れることもありうるので、trim して空なら「無い」扱いにする。
+ */
+function GameHeading({ game }: { game: Game }) {
+  const title = game.title?.trim() ?? "";
+  if (title === "") {
+    return <span className="font-medium">{game.playedOn}</span>;
+  }
+  return (
+    // 60文字の空白なし文字列でも横に溢れさせない
+    <span className="min-w-0 flex-1 break-words">
+      <span className="block font-medium">{title}</span>
+      <span className="text-muted-foreground block text-xs">{game.playedOn}</span>
+    </span>
+  );
+}
+
 export function GamesPage() {
   const { games, members, league, roster } = useLeague();
   const { leagueId } = useParams();
@@ -69,13 +88,10 @@ export function GamesPage() {
           <ul className="mt-2 space-y-3">
             {reservations.map((game) => (
               <li key={game.id} className="border-border bg-muted/40 rounded-lg border p-3">
-                <div className="flex items-baseline justify-between">
-                  <span className="font-medium">{game.playedOn}</span>
-                  {editLink(game)}
+                <div className="flex items-baseline justify-between gap-2">
+                  <GameHeading game={game} />
+                  <span className="shrink-0">{editLink(game)}</span>
                 </div>
-                {game.memo === null ? null : (
-                  <p className="text-muted-foreground mt-1 text-sm">{game.memo}</p>
-                )}
                 {/* 予約は pt・順位を持たないので、名前と日付だけ。
                     チーム順に並べると「2-2 になっている」が読める。
                     member_id 順のままだと id の並び次第で A,B,A,B にもなり、
@@ -110,9 +126,9 @@ export function GamesPage() {
               if (!isScorable(game, rule)) {
                 return (
                   <li key={game.id} className="border-destructive rounded-lg border p-3">
-                    <div className="flex items-baseline justify-between">
-                      <span className="font-medium">{game.playedOn}</span>
-                      <span className="text-muted-foreground text-xs">#{game.id}</span>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <GameHeading game={game} />
+                      <span className="text-muted-foreground shrink-0 text-xs">#{game.id}</span>
                     </div>
                     <p className="text-destructive mt-2 text-sm">
                       データ不整合（4人ぶんの素点がそろっていません）。運営に連絡してください。
@@ -126,13 +142,10 @@ export function GamesPage() {
               );
               return (
                 <li key={game.id} className="border-border rounded-lg border p-3">
-                  <div className="flex items-baseline justify-between">
-                    <span className="font-medium">{game.playedOn}</span>
-                    {editLink(game)}
+                  <div className="flex items-baseline justify-between gap-2">
+                    <GameHeading game={game} />
+                    <span className="shrink-0">{editLink(game)}</span>
                   </div>
-                  {game.memo === null ? null : (
-                    <p className="text-muted-foreground mt-1 text-sm">{game.memo}</p>
-                  )}
                   <ul className="mt-2 space-y-1 text-sm">
                     {scored.map((s) => (
                       <li key={s.memberId} className="flex justify-between tabular-nums">

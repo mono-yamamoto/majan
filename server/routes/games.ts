@@ -29,10 +29,10 @@ function parseGameInput(body: unknown): Parsed<GameInput> {
     return { ok: false, error: "playedOn must be a string" };
   }
 
-  // memo は未指定を null と同じに扱う
-  const rawMemo = body.memo ?? null;
-  if (rawMemo !== null && typeof rawMemo !== "string") {
-    return { ok: false, error: "memo must be a string or null" };
+  // title は未指定を null と同じに扱う
+  const rawTitle = body.title ?? null;
+  if (rawTitle !== null && typeof rawTitle !== "string") {
+    return { ok: false, error: "title must be a string or null" };
   }
 
   if (!Array.isArray(body.results)) {
@@ -57,7 +57,7 @@ function parseGameInput(body: unknown): Parsed<GameInput> {
     results.push({ memberId, rawScore });
   }
 
-  return { ok: true, value: { playedOn: body.playedOn, memo: rawMemo, results } };
+  return { ok: true, value: { playedOn: body.playedOn, title: rawTitle, results } };
 }
 
 /** POST は新規作成なので leagueId を受け取る（存在しなければ 404 で明示的に弾く） */
@@ -70,7 +70,7 @@ function parseLeagueId(body: unknown): Parsed<number> {
   return { ok: true, value: leagueId };
 }
 
-/** ボディの上限。memo 500文字は validation で見るが、c.req.json() はその前に全体をパースする */
+/** ボディの上限。title 60文字は validation で見るが、c.req.json() はその前に全体をパースする */
 const MAX_BODY_BYTES = 16 * 1024;
 
 type Body = { ok: true; value: unknown } | { ok: false; status: 400 | 413; error: string };
@@ -166,8 +166,8 @@ games.post("/api/games", async (c) => {
   // game_id は last_insert_rowid() ではなく (SELECT MAX(id) FROM games) で参照する（D-9）。
   const statements = [
     db
-      .prepare("INSERT INTO games (league_id, played_on, memo) VALUES (?1, ?2, ?3)")
-      .bind(leagueId.value, input.value.playedOn, input.value.memo),
+      .prepare("INSERT INTO games (league_id, played_on, title) VALUES (?1, ?2, ?3)")
+      .bind(leagueId.value, input.value.playedOn, input.value.title),
     ...input.value.results.map((r) =>
       db
         .prepare(
@@ -229,8 +229,8 @@ games.patch("/api/games/:id", async (c) => {
   // NOT NULL 違反になり batch() 全体が巻き戻る。それを 404 に写像する。
   const batched = await runBatch(db, [
     db
-      .prepare("UPDATE games SET played_on = ?2, memo = ?3 WHERE id = ?1 AND deleted_at IS NULL")
-      .bind(gameId, input.value.playedOn, input.value.memo),
+      .prepare("UPDATE games SET played_on = ?2, title = ?3 WHERE id = ?1 AND deleted_at IS NULL")
+      .bind(gameId, input.value.playedOn, input.value.title),
     db.prepare("DELETE FROM game_results WHERE game_id = ?1").bind(gameId),
     ...input.value.results.map((r) =>
       db

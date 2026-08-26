@@ -33,7 +33,7 @@ function stubNonJsonFetch(status: number) {
 
 const INPUT = {
   playedOn: "2026-08-26",
-  memo: null,
+  title: null,
   results: [
     { memberId: 1, rawScore: 42300 },
     { memberId: 6, rawScore: 28100 },

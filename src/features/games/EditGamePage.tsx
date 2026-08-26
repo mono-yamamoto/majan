@@ -144,7 +144,9 @@ export function EditGamePage() {
           <DialogHeader>
             <DialogTitle>この半荘を削除しますか</DialogTitle>
             <DialogDescription>
-              {game.playedOn}{" "}
+              {/* 同じ日に複数の半荘がありうるので、日付だけだと「どれを消すのか」が
+                  確定しない。タイトルがあるならそちらを先に出す */}
+              {game.title?.trim() ? `「${game.title.trim()}」（${game.playedOn}）` : game.playedOn}
               の半荘を削除します。アプリからは元に戻せません（復元は運営のSQL操作）。
             </DialogDescription>
           </DialogHeader>

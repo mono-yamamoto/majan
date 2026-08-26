@@ -3,7 +3,7 @@ import type { LeagueRule } from "./scoring";
 import type { GameInput } from "./types";
 import {
   isValidPlayedOn,
-  MEMO_MAX_LENGTH,
+  TITLE_MAX_LENGTH,
   validateGameInput,
   type Roster,
   type ValidationErrorCode,
@@ -32,7 +32,7 @@ const ROSTER: Roster = new Map([
 /** 素点合計がちょうど 25000 x 4 になる 2-2 の正常入力 */
 const validInput = (): GameInput => ({
   playedOn: "2026-08-26",
-  memo: null,
+  title: null,
   results: [
     { memberId: 1, rawScore: 42300 },
     { memberId: 6, rawScore: 28100 },
@@ -62,7 +62,7 @@ describe("validateGameInput / 正常系", () => {
   it("箱下（負の素点）は弾かない", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 60000 },
         { memberId: 6, rawScore: 40000 },
@@ -82,7 +82,7 @@ describe("validateGameInput / 1. 件数", () => {
   ])("%s なら RESULT_COUNT", (_label, memberIds) => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: (memberIds as number[]).map((memberId) => ({ memberId, rawScore: 25000 })),
     };
     expect(codesOf(validateGameInput(input, RULE, ROSTER))).toContain("RESULT_COUNT");
@@ -91,7 +91,7 @@ describe("validateGameInput / 1. 件数", () => {
   it("件数が違うときは 2-2 と素点合計を判定しない（4人前提の検査のため）", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 25000 },
         { memberId: 2, rawScore: 25000 },
@@ -114,7 +114,7 @@ describe("validateGameInput / 重複チェックと 2-2 は独立に必要", () 
   it("重複していても 2-2 が成立してしまうケースを DUPLICATE_MEMBER で弾く", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 30000 }, // team 1
         { memberId: 1, rawScore: 30000 }, // team 1（重複）
@@ -133,7 +133,7 @@ describe("validateGameInput / 重複チェックと 2-2 は独立に必要", () 
   it("重複がなくても 2-2 でなければ TEAM_BALANCE で弾く", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 30000 }, // team 1
         { memberId: 2, rawScore: 30000 }, // team 1
@@ -154,7 +154,7 @@ describe("validateGameInput / 重複チェックと 2-2 は独立に必要", () 
   it("3-1 に偏っているとき、多い側の3人だけを memberIds に入れる", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 25000 }, // team 1
         { memberId: 2, rawScore: 25000 }, // team 1
@@ -173,7 +173,7 @@ describe("validateGameInput / 重複チェックと 2-2 は独立に必要", () 
   it("4人とも同じチームなら、その旨を出して全員を対象にする", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [1, 2, 3, 5].map((memberId) => ({ memberId, rawScore: 25000 })),
     };
     const err = find(validateGameInput(input, RULE, ROSTER), "TEAM_BALANCE");
@@ -185,7 +185,7 @@ describe("validateGameInput / 重複チェックと 2-2 は独立に必要", () 
     const roster: Roster = new Map([...ROSTER, [11, 3]]);
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 25000 }, // team 1
         { memberId: 2, rawScore: 25000 }, // team 1
@@ -200,7 +200,7 @@ describe("validateGameInput / 重複チェックと 2-2 は独立に必要", () 
   it("4人が同じチームでも弾く", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [1, 2, 3, 4].map((memberId) => ({ memberId, rawScore: 25000 })),
     };
     expect(codesOf(validateGameInput(input, RULE, ROSTER))).toContain("TEAM_BALANCE");
@@ -210,7 +210,7 @@ describe("validateGameInput / 重複チェックと 2-2 は独立に必要", () 
     const roster: Roster = new Map([...ROSTER, [11, 3]]);
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 25000 }, // team 1
         { memberId: 2, rawScore: 25000 }, // team 1
@@ -226,7 +226,7 @@ describe("validateGameInput / 4. リーグ所属と、エラーの原因帰属",
   it("名簿から引けないメンバーは NOT_IN_LEAGUE で、誰かを特定できる", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 25000 },
         { memberId: 2, rawScore: 25000 },
@@ -248,7 +248,7 @@ describe("validateGameInput / 4. リーグ所属と、エラーの原因帰属",
   it("未所属メンバーがいるとき TEAM_BALANCE を出さない（本当の原因を隠さない）", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 25000 }, // team 1
         { memberId: 2, rawScore: 25000 }, // team 1
@@ -313,7 +313,7 @@ describe("validateGameInput / 6. 素点合計・7. 素点の単位", () => {
   it("負の素点でも 100 の倍数判定は正しい（SQLite の % と同じくゼロ方向丸め）", () => {
     const base = (score: number): GameInput => ({
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 100000 - 25000 - 25000 - score },
         { memberId: 6, rawScore: 25000 },
@@ -405,7 +405,7 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
   it("安全整数を超える素点は RAW_SCORE_RANGE で弾く（合計も 100 の倍数も素通りする組）", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 1e19 },
         { memberId: 6, rawScore: -1e19 },
@@ -425,7 +425,7 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
   it("範囲外の素点があるとき RAW_SCORE_UNIT と RAW_SCORE_TOTAL を出さない（誤解を招くため）", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 1e19 },
         { memberId: 6, rawScore: 25000 },
@@ -444,7 +444,7 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
     const big = 9e15; // Number.MAX_SAFE_INTEGER (9007199254740991) 未満
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: big },
         { memberId: 6, rawScore: -big },
@@ -469,7 +469,7 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
   ])("素点が %s なら RAW_SCORE_NOT_A_NUMBER（「大きすぎます」とは言わない）", (_l, rawScore) => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: rawScore as number },
         { memberId: 6, rawScore: 25000 },
@@ -488,7 +488,7 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
   it("NaN があるときも RAW_SCORE_UNIT と RAW_SCORE_TOTAL は出さない（判定が嘘になるため）", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: Number.NaN },
         { memberId: 6, rawScore: 25000 },
@@ -502,7 +502,7 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
   it("1e19 は RAW_SCORE_RANGE のまま（桁の問題と読めなさを混ぜない）", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 1e19 },
         { memberId: 6, rawScore: -1e19 },
@@ -518,7 +518,7 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
   it("NaN と 1e19 が混ざれば両方報告する", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: Number.NaN },
         { memberId: 6, rawScore: 1e19 },
@@ -535,7 +535,7 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
   it("memberId が NaN でも MEMBER_ID_RANGE の文言は事実に合っている", () => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: Number.NaN, rawScore: 25000 },
         { memberId: 6, rawScore: 25000 },
@@ -565,7 +565,7 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
   ])("memberId が %s なら MEMBER_ID_RANGE", (_label, memberId) => {
     const input: GameInput = {
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: memberId as number, rawScore: 25000 },
         { memberId: 6, rawScore: 25000 },
@@ -584,7 +584,7 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
 describe("validateGameInput / 予約（素点が全部 null）", () => {
   const reservation = (): GameInput => ({
     playedOn: "2026-09-10",
-    memo: null,
+    title: null,
     results: [
       { memberId: 1, rawScore: null },
       { memberId: 6, rawScore: null },
@@ -656,32 +656,32 @@ describe("validateGameInput / 予約（素点が全部 null）", () => {
   });
 });
 
-describe("validateGameInput / 10. memo の長さ", () => {
-  const withMemo = (memo: string | null): GameInput => ({ ...validInput(), memo });
+describe("validateGameInput / 10. title の長さ", () => {
+  const withTitle = (title: string | null): GameInput => ({ ...validInput(), title });
 
-  it("memo が null なら通る", () => {
-    expect(validateGameInput(withMemo(null), RULE, ROSTER)).toEqual([]);
+  it("title が null なら通る", () => {
+    expect(validateGameInput(withTitle(null), RULE, ROSTER)).toEqual([]);
   });
 
-  it("memo が空文字なら通る", () => {
-    expect(validateGameInput(withMemo(""), RULE, ROSTER)).toEqual([]);
+  it("title が空文字なら通る", () => {
+    expect(validateGameInput(withTitle(""), RULE, ROSTER)).toEqual([]);
   });
 
-  it(`ちょうど ${MEMO_MAX_LENGTH} 文字なら通る（境界）`, () => {
-    expect(validateGameInput(withMemo("あ".repeat(MEMO_MAX_LENGTH)), RULE, ROSTER)).toEqual([]);
+  it(`ちょうど ${TITLE_MAX_LENGTH} 文字なら通る（境界）`, () => {
+    expect(validateGameInput(withTitle("あ".repeat(TITLE_MAX_LENGTH)), RULE, ROSTER)).toEqual([]);
   });
 
-  it(`${MEMO_MAX_LENGTH + 1} 文字なら MEMO_TOO_LONG（境界）`, () => {
-    const errors = validateGameInput(withMemo("あ".repeat(MEMO_MAX_LENGTH + 1)), RULE, ROSTER);
-    const err = find(errors, "MEMO_TOO_LONG");
-    expect(err?.field).toBe("memo");
+  it(`${TITLE_MAX_LENGTH + 1} 文字なら TITLE_TOO_LONG（境界）`, () => {
+    const errors = validateGameInput(withTitle("あ".repeat(TITLE_MAX_LENGTH + 1)), RULE, ROSTER);
+    const err = find(errors, "TITLE_TOO_LONG");
+    expect(err?.field).toBe("title");
     expect(err?.memberIds).toEqual([]);
-    expect(err?.message).toContain(String(MEMO_MAX_LENGTH + 1));
+    expect(err?.message).toContain(String(TITLE_MAX_LENGTH + 1));
   });
 
-  it("極端に長い memo も弾く", () => {
-    expect(codesOf(validateGameInput(withMemo("x".repeat(100_000)), RULE, ROSTER))).toEqual([
-      "MEMO_TOO_LONG",
+  it("極端に長い title も弾く", () => {
+    expect(codesOf(validateGameInput(withTitle("x".repeat(100_000)), RULE, ROSTER))).toEqual([
+      "TITLE_TOO_LONG",
     ]);
   });
 });
@@ -690,7 +690,7 @@ describe("validateGameInput / エラーは全部返す", () => {
   it("複数の問題があれば最初の1件で打ち切らずすべて返す", () => {
     const input: GameInput = {
       playedOn: "banana",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 30050 }, // 100の倍数でない / team 1
         { memberId: 2, rawScore: 30000 }, // team 1
@@ -710,7 +710,7 @@ describe("validateGameInput / エラーは全部返す", () => {
   it("返る順序は features.mdx のバリデーション表の順で安定している", () => {
     const input: GameInput = {
       playedOn: "banana",
-      memo: "め".repeat(MEMO_MAX_LENGTH + 1),
+      title: "め".repeat(TITLE_MAX_LENGTH + 1),
       results: [
         { memberId: 1, rawScore: 30050 },
         { memberId: 1, rawScore: 30000 }, // 重複
@@ -723,7 +723,7 @@ describe("validateGameInput / エラーは全部返す", () => {
       "NOT_IN_LEAGUE",
       "RAW_SCORE_UNIT",
       "INVALID_DATE",
-      "MEMO_TOO_LONG",
+      "TITLE_TOO_LONG",
     ]);
   });
 });

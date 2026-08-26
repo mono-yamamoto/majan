@@ -218,12 +218,12 @@ export function GameForm({
       </p>
 
       <label className="mt-4 block">
-        <span className="text-muted-foreground text-sm">メモ（任意）</span>
+        <span className="text-muted-foreground text-sm">タイトル（任意）</span>
         <Input
-          value={value.memo}
-          onChange={(e) => onChange({ ...value, memo: e.target.value })}
+          value={value.title}
+          onChange={(e) => onChange({ ...value, title: e.target.value })}
           className="mt-1"
-          placeholder="任意"
+          placeholder="第3節、月例会 など"
         />
       </label>
 

@@ -40,22 +40,23 @@ export type ValidationErrorCode =
   | "RAW_SCORE_RANGE"
   /** played_on が YYYY-MM-DD の実在日付でない */
   | "INVALID_DATE"
-  /** memo が長すぎる */
-  | "MEMO_TOO_LONG"
+  /** title が長すぎる */
+  | "TITLE_TOO_LONG"
   /** 素点が一部だけ入っている（予約でも確定でもない状態） */
   | "MIXED_SCORES";
 
 /**
- * memo の上限。セキュリティではなく取得性能のための上限で、
- * GET /api/leagues/:id が全半荘を1回で返す設計上、1件の肥大が全員の取得を重くする。
+ * title の上限。一覧で**一番大きく出る行**なので、長いとレイアウトが崩れる。
+ * あわせて取得性能の理由もある（GET /api/leagues/:id が全半荘を1回で返す設計上、
+ * 1件の肥大が全員の取得を重くする）。
  */
-export const MEMO_MAX_LENGTH = 500;
+export const TITLE_MAX_LENGTH = 60;
 
 export type ValidationError = {
   /** 機械可読なコード。UI はこれでメッセージを差し替えられる */
   code: ValidationErrorCode;
   /** どの入力項目の問題か。UI のハイライト先 */
-  field: "playedOn" | "memo" | "results";
+  field: "playedOn" | "title" | "results";
   /**
    * 問題のあるメンバー。項目全体の問題（合計・件数など）なら空配列。
    * 名前は持たない（UI 側が memberId から解決する）。
@@ -101,7 +102,7 @@ export function isValidPlayedOn(value: string): boolean {
  * 問題がなければ空配列。
  *
  * 返る順序は features.mdx のバリデーション表の順（件数 → 重複 → メンバーIDの範囲 →
- * 所属 → 2-2 → 合計 → 単位 → 素点の範囲 → 日付 → メモ）で固定する。
+ * 所属 → 2-2 → 合計 → 単位 → 素点の範囲 → 日付 → タイトル）で固定する。
  *
  * ★原因帰属の設計★
  * 「2-2 固定」は、件数が4人で・重複がなく・4人とも名簿から引けたときだけ判定する。
@@ -310,13 +311,13 @@ export function validateGameInput(
     });
   }
 
-  // 11. memo の長さ
-  if (input.memo !== null && input.memo.length > MEMO_MAX_LENGTH) {
+  // 11. title の長さ
+  if (input.title !== null && input.title.length > TITLE_MAX_LENGTH) {
     errors.push({
-      code: "MEMO_TOO_LONG",
-      field: "memo",
+      code: "TITLE_TOO_LONG",
+      field: "title",
       memberIds: [],
-      message: `メモは${MEMO_MAX_LENGTH}文字以内で入力してください（現在 ${input.memo.length}文字）`,
+      message: `タイトルは${TITLE_MAX_LENGTH}文字以内で入力してください（現在 ${input.title.length}文字）`,
     });
   }
 

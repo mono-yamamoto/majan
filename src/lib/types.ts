@@ -46,7 +46,7 @@ export type GameRow = {
   league_id: number;
   /** YYYY-MM-DD */
   played_on: string;
-  memo: string | null;
+  title: string | null;
   /** ISO8601 UTC */
   created_at: string;
   /** 論理削除。未削除なら NULL */
@@ -80,7 +80,7 @@ export type GameResultRow = {
 export type GameInput = {
   /** YYYY-MM-DD */
   playedOn: string;
-  memo: string | null;
+  title: string | null;
   /** 素点は全部入れる（確定）か全部 null（予約）かのどちらか。混在は弾かれる */
   results: { memberId: number; rawScore: number | null }[];
 };

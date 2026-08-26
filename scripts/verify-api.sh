@@ -141,8 +141,8 @@ shape() {
 POST_shape() { shape "$1" "$2" "$3" -X POST "${BASE}/api/games" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" -d "$4"; }
 PATCHG() { t "$1" "$2" -X PATCH "${BASE}/api/games/$3" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" -d "$4"; }
 
-GOOD='{"leagueId":1,"playedOn":"2026-08-26","memo":"初戦","results":[{"memberId":1,"rawScore":42300},{"memberId":6,"rawScore":28100},{"memberId":2,"rawScore":18400},{"memberId":7,"rawScore":11200}]}'
-EDIT='{"playedOn":"2026-08-28","memo":"修正後","results":[{"memberId":1,"rawScore":50000},{"memberId":6,"rawScore":20000},{"memberId":2,"rawScore":20000},{"memberId":7,"rawScore":10000}]}'
+GOOD='{"leagueId":1,"playedOn":"2026-08-26","title":"初戦","results":[{"memberId":1,"rawScore":42300},{"memberId":6,"rawScore":28100},{"memberId":2,"rawScore":18400},{"memberId":7,"rawScore":11200}]}'
+EDIT='{"playedOn":"2026-08-28","title":"修正後","results":[{"memberId":1,"rawScore":50000},{"memberId":6,"rawScore":20000},{"memberId":2,"rawScore":20000},{"memberId":7,"rawScore":10000}]}'
 
 reset_db
 bun run build >/dev/null 2>&1
@@ -168,10 +168,10 @@ POST 400 'rawScore が null'              '{"leagueId":1,"playedOn":"2026-08-26"
 POST 400 'rawScore が 16進文字列'        '{"leagueId":1,"playedOn":"2026-08-26","results":[{"memberId":1,"rawScore":"0x61a8"}]}'
 POST 400 'rawScore が 1e19（安全整数外）' '{"leagueId":1,"playedOn":"2026-08-27","results":[{"memberId":1,"rawScore":1e19},{"memberId":6,"rawScore":-1e19},{"memberId":2,"rawScore":50000},{"memberId":7,"rawScore":50000}]}'
 POST 400 'playedOn が数値'               '{"leagueId":1,"playedOn":12345,"results":[]}'
-POST 400 'memo が数値'                   '{"leagueId":1,"playedOn":"2026-08-26","memo":9,"results":[]}'
+POST 400 'title が数値'                   '{"leagueId":1,"playedOn":"2026-08-26","title":9,"results":[]}'
 POST 400 'JSON 壊れ'                     '{not json'
 t 413 'ボディ 16KB 超' -X POST "${BASE}/api/games" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" \
-  -d "{\"leagueId\":1,\"playedOn\":\"2026-08-26\",\"memo\":\"$(head -c 20000 /dev/zero | tr '\0' 'a')\",\"results\":[]}"
+  -d "{\"leagueId\":1,\"playedOn\":\"2026-08-26\",\"title\":\"$(head -c 20000 /dev/zero | tr '\0' 'a')\",\"results\":[]}"
 
 echo; echo "===== :id が正の安全整数でなければ 404 ====="
 for bad in abc -1 1.5 1e30 0 99999999999999999999; do
@@ -207,10 +207,10 @@ echo; echo "===== parse 段と validation 段の境界 ====="
 POST 400 'results が3件 → parse は通り validation が弾く' '{"leagueId":1,"playedOn":"2026-08-26","results":[{"memberId":1,"rawScore":25000},{"memberId":6,"rawScore":25000},{"memberId":2,"rawScore":50000}]}'
 POST_shape "3件のときのコードは RESULT_COUNT" "RESULT_COUNT" 'd["errors"][0]["code"]' \
   '{"leagueId":1,"playedOn":"2026-08-26","results":[{"memberId":1,"rawScore":25000},{"memberId":6,"rawScore":25000},{"memberId":2,"rawScore":50000}]}'
-POST_shape "memo 501文字は MEMO_TOO_LONG（parse ではなく validation）" "MEMO_TOO_LONG" \
+POST_shape "title 61文字は TITLE_TOO_LONG（parse ではなく validation）" "TITLE_TOO_LONG" \
   '[e["code"] for e in d["errors"]][-1]' \
-  "{\"leagueId\":1,\"playedOn\":\"2026-08-26\",\"memo\":\"$(head -c 501 /dev/zero | tr '\0' 'x')\",\"results\":[{\"memberId\":1,\"rawScore\":42300},{\"memberId\":6,\"rawScore\":28100},{\"memberId\":2,\"rawScore\":18400},{\"memberId\":7,\"rawScore\":11200}]}"
-POST 201 'memo ちょうど500文字は通る' "{\"leagueId\":1,\"playedOn\":\"2026-08-29\",\"memo\":\"$(head -c 500 /dev/zero | tr '\0' 'x')\",\"results\":[{\"memberId\":1,\"rawScore\":42300},{\"memberId\":6,\"rawScore\":28100},{\"memberId\":2,\"rawScore\":18400},{\"memberId\":7,\"rawScore\":11200}]}"
+  "{\"leagueId\":1,\"playedOn\":\"2026-08-26\",\"title\":\"$(head -c 61 /dev/zero | tr '\0' 'x')\",\"results\":[{\"memberId\":1,\"rawScore\":42300},{\"memberId\":6,\"rawScore\":28100},{\"memberId\":2,\"rawScore\":18400},{\"memberId\":7,\"rawScore\":11200}]}"
+POST 201 'title ちょうど60文字は通る' "{\"leagueId\":1,\"playedOn\":\"2026-08-29\",\"title\":\"$(head -c 60 /dev/zero | tr '\0' 'x')\",\"results\":[{\"memberId\":1,\"rawScore\":42300},{\"memberId\":6,\"rawScore\":28100},{\"memberId\":2,\"rawScore\":18400},{\"memberId\":7,\"rawScore\":11200}]}"
 POST 201 'rawScore が数値 2.5e4 は通る（文字列 "2.5e4" の 400 と対）' '{"leagueId":1,"playedOn":"2026-08-30","results":[{"memberId":1,"rawScore":2.5e4},{"memberId":6,"rawScore":25000},{"memberId":2,"rawScore":25000},{"memberId":7,"rawScore":25000}]}'
 
 echo; echo "===== 同じ日に2半荘（played_on に UNIQUE は無い） ====="
@@ -236,22 +236,22 @@ check "game_id が games に無い孤児が無い"    "$(Q "SELECT COUNT(*) AS n
 
 echo; echo "===== PATCH の league_id は DB の games 行から読む ====="
 PATCHG 200 'leagueId なし'                  1 "$EDIT"
-PATCHG 200 'leagueId が DB と一致'          1 '{"leagueId":1,"playedOn":"2026-08-28","memo":"m","results":[{"memberId":1,"rawScore":50000},{"memberId":6,"rawScore":20000},{"memberId":2,"rawScore":20000},{"memberId":7,"rawScore":10000}]}'
-PATCHG 400 'leagueId が DB と不一致 → 400'  1 '{"leagueId":2,"playedOn":"2026-08-28","memo":"m","results":[{"memberId":1,"rawScore":50000},{"memberId":6,"rawScore":20000},{"memberId":2,"rawScore":20000},{"memberId":7,"rawScore":10000}]}'
-check "400 のあとも内容が変わっていない"   "$(Q "SELECT memo FROM games WHERE id=1;")" "m"
+PATCHG 200 'leagueId が DB と一致'          1 '{"leagueId":1,"playedOn":"2026-08-28","title":"m","results":[{"memberId":1,"rawScore":50000},{"memberId":6,"rawScore":20000},{"memberId":2,"rawScore":20000},{"memberId":7,"rawScore":10000}]}'
+PATCHG 400 'leagueId が DB と不一致 → 400'  1 '{"leagueId":2,"playedOn":"2026-08-28","title":"m","results":[{"memberId":1,"rawScore":50000},{"memberId":6,"rawScore":20000},{"memberId":2,"rawScore":20000},{"memberId":7,"rawScore":10000}]}'
+check "400 のあとも内容が変わっていない"   "$(Q "SELECT title FROM games WHERE id=1;")" "m"
 check "全置換後も（この半荘は）4行のまま" "$(Q "SELECT COUNT(*) AS n FROM game_results WHERE game_id=1;")" "4"
 PATCHG 404 '存在しない :id'               999 "$EDIT"
 
-echo; echo "===== PATCH: メンバー総入れ替えと memo の往復（全置換方式の理由そのもの） ====="
-PATCHG 200 'メンバーを 1,6,2,7 → 3,8,4,9 に総入れ替え' 1 '{"playedOn":"2026-08-28","memo":"入れ替え","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
+echo; echo "===== PATCH: メンバー総入れ替えと title の往復（全置換方式の理由そのもの） ====="
+PATCHG 200 'メンバーを 1,6,2,7 → 3,8,4,9 に総入れ替え' 1 '{"playedOn":"2026-08-28","title":"入れ替え","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
 check "member_id が入れ替わっている"       "$(Q "SELECT group_concat(member_id) AS ids FROM (SELECT member_id FROM game_results WHERE game_id=1 ORDER BY member_id);")" "3,4,8,9"
 check "入れ替え後も4行のまま"              "$(Q "SELECT COUNT(*) AS n FROM game_results WHERE game_id=1;")" "4"
-PATCHG 200 'memo を null にする'            1 '{"playedOn":"2026-08-28","memo":null,"results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
-check "memo が NULL になった"               "$(Q "SELECT COUNT(*) AS n FROM games WHERE id=1 AND memo IS NULL;")" "1"
-PATCHG 200 'memo を省略しても null 扱い'    1 '{"playedOn":"2026-08-28","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
-check "省略でも NULL のまま"                "$(Q "SELECT COUNT(*) AS n FROM games WHERE id=1 AND memo IS NULL;")" "1"
-PATCHG 200 'memo を文字列に戻す'            1 '{"playedOn":"2026-08-28","memo":"戻した","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
-check "memo が文字列に戻った"               "$(Q "SELECT memo FROM games WHERE id=1;")" "戻した"
+PATCHG 200 'title を null にする'            1 '{"playedOn":"2026-08-28","title":null,"results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
+check "title が NULL になった"               "$(Q "SELECT COUNT(*) AS n FROM games WHERE id=1 AND title IS NULL;")" "1"
+PATCHG 200 'title を省略しても null 扱い'    1 '{"playedOn":"2026-08-28","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
+check "省略でも NULL のまま"                "$(Q "SELECT COUNT(*) AS n FROM games WHERE id=1 AND title IS NULL;")" "1"
+PATCHG 200 'title を文字列に戻す'            1 '{"playedOn":"2026-08-28","title":"戻した","results":[{"memberId":3,"rawScore":50000},{"memberId":8,"rawScore":20000},{"memberId":4,"rawScore":20000},{"memberId":9,"rawScore":10000}]}'
+check "title が文字列に戻った"               "$(Q "SELECT title FROM games WHERE id=1;")" "戻した"
 
 echo; echo "===== 論理削除は片道かつ冪等 ====="
 t 400 'deleted:false（復活）'      -X PATCH "${BASE}/api/games/1/deleted" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" -d '{"deleted":false}'

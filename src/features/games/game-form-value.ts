@@ -20,25 +20,25 @@ export type GameFormRow = {
 
 export type GameFormValue = {
   playedOn: string;
-  memo: string;
+  title: string;
   /** 4人ぶん。未選択は memberId = 0、未入力は rawScore = "" */
   rows: GameFormRow[];
 };
 
 export const emptyValue = (): GameFormValue => ({
   playedOn: todayLocal(),
-  memo: "",
+  title: "",
   rows: [0, 0, 0, 0].map((memberId) => ({ memberId, rawScore: "", negative: false })),
 });
 
 export const valueFromGame = (game: {
   playedOn: string;
-  memo: string | null;
+  title: string | null;
   /** 予約（素点未入力）では rawScore が null */
   results: { memberId: number; rawScore: number | null }[];
 }): GameFormValue => ({
   playedOn: game.playedOn,
-  memo: game.memo ?? "",
+  title: game.title ?? "",
   // 一覧は順位順に出るので、編集画面も素点降順に揃える。
   // GET は member_id 順で返すため、そのまま並べると開いた瞬間に順番が変わって見える
   rows: [...game.results]
@@ -59,7 +59,9 @@ export const valueFromGame = (game: {
 export function toGameInput(value: GameFormValue): GameInput {
   return {
     playedOn: value.playedOn,
-    memo: value.memo.trim() === "" ? null : value.memo,
+    // trim して保存する。一覧では trim した文字列を出すので、
+    // 保存する値と見える値をずらさない（60文字の上限も見える文字数で数える）
+    title: value.title.trim() === "" ? null : value.title.trim(),
     results: value.rows.map((row) => ({
       memberId: row.memberId,
       // 空欄は null（予約）として渡す。全部空なら予約、全部数値なら確定、

@@ -99,7 +99,7 @@ leagues.get("/api/leagues/:id", async (c) => {
     games: (gameRes.results as GameRow[]).map((g) => ({
       id: g.id,
       playedOn: g.played_on,
-      memo: g.memo,
+      title: g.title,
       createdAt: g.created_at,
       results: resultsByGame.get(g.id) ?? [],
     })),

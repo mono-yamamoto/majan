@@ -6,6 +6,7 @@ import {
   updateRow,
   valueFromGame,
   type GameFormRow,
+  type GameFormValue,
 } from "./game-form-value";
 
 const row = (patch: Partial<GameFormRow> = {}): GameFormRow => ({
@@ -58,7 +59,7 @@ describe("toGameInput / 符号の扱い", () => {
   it("negative が付いた行は負数になる", () => {
     const input = toGameInput({
       playedOn: "2026-08-26",
-      memo: "",
+      title: "",
       rows: [
         row({ memberId: 1, rawScore: "60000" }),
         row({ memberId: 6, rawScore: "30000" }),
@@ -67,13 +68,13 @@ describe("toGameInput / 符号の扱い", () => {
       ],
     });
     expect(input.results.map((r) => r.rawScore)).toEqual([60000, 30000, 20000, -10000]);
-    expect(input.memo).toBeNull();
+    expect(input.title).toBeNull();
   });
 
   it("空欄は null（予約）として渡す", () => {
     const input = toGameInput({
       playedOn: "2026-08-26",
-      memo: "",
+      title: "",
       rows: [row({ rawScore: "" })],
     });
     expect(input.results[0].rawScore).toBeNull();
@@ -82,7 +83,7 @@ describe("toGameInput / 符号の扱い", () => {
   it("数字でない文字列は NaN のまま渡す（validateGameInput が理由つきで弾く）", () => {
     const input = toGameInput({
       playedOn: "2026-08-26",
-      memo: "",
+      title: "",
       rows: [row({ rawScore: "abc" })],
     });
     expect(Number.isNaN(input.results[0].rawScore as number)).toBe(true);
@@ -95,29 +96,29 @@ describe("予約かどうかの判定", () => {
 
   it("4人そろっていて素点が全部空なら予約", () => {
     expect(
-      isReservationInput({ playedOn: "2026-08-26", memo: "", rows: four(["", "", "", ""]) }, 4),
+      isReservationInput({ playedOn: "2026-08-26", title: "", rows: four(["", "", "", ""]) }, 4),
     ).toBe(true);
   });
 
   it("メンバーが未選択なら予約にならない（誰が対局するかが目的なので）", () => {
     const rows = four(["", "", "", ""]);
     rows[0].memberId = 0;
-    expect(isReservationInput({ playedOn: "2026-08-26", memo: "", rows }, 4)).toBe(false);
+    expect(isReservationInput({ playedOn: "2026-08-26", title: "", rows }, 4)).toBe(false);
   });
 
   it("素点が1つでも入っていれば予約ではない", () => {
     expect(
       isReservationInput(
-        { playedOn: "2026-08-26", memo: "", rows: four(["25000", "", "", ""]) },
+        { playedOn: "2026-08-26", title: "", rows: four(["25000", "", "", ""]) },
         4,
       ),
     ).toBe(false);
   });
 
   it("一部だけ入っている状態を検出できる", () => {
-    const partial = { playedOn: "2026-08-26", memo: "", rows: four(["25000", "", "", ""]) };
-    const all = { playedOn: "2026-08-26", memo: "", rows: four(["1", "2", "3", "4"]) };
-    const none = { playedOn: "2026-08-26", memo: "", rows: four(["", "", "", ""]) };
+    const partial = { playedOn: "2026-08-26", title: "", rows: four(["25000", "", "", ""]) };
+    const all = { playedOn: "2026-08-26", title: "", rows: four(["1", "2", "3", "4"]) };
+    const none = { playedOn: "2026-08-26", title: "", rows: four(["", "", "", ""]) };
     expect(hasPartialScores(partial)).toBe(true);
     expect(hasPartialScores(all)).toBe(false);
     expect(hasPartialScores(none)).toBe(false);
@@ -128,7 +129,7 @@ describe("valueFromGame / 既存データの読み込み", () => {
   it("負の素点は絶対値 + negative に分解する", () => {
     const value = valueFromGame({
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 1, rawScore: 40000 },
         { memberId: 7, rawScore: -10000 },
@@ -149,7 +150,7 @@ describe("valueFromGame / 既存データの読み込み", () => {
   it("予約（rawScore が null）は空文字で読み込む。0 を入れない", () => {
     const value = valueFromGame({
       playedOn: "2026-09-10",
-      memo: null,
+      title: null,
       results: [1, 6, 2, 7].map((memberId) => ({ memberId, rawScore: null })),
     });
     expect(value.rows.map((r) => r.rawScore)).toEqual(["", "", "", ""]);
@@ -161,7 +162,7 @@ describe("valueFromGame / 既存データの読み込み", () => {
   it("予約を読み込んでも memberId は保たれる（誰が対局するかが目的）", () => {
     const value = valueFromGame({
       playedOn: "2026-09-10",
-      memo: null,
+      title: null,
       results: [1, 6, 2, 7].map((memberId) => ({ memberId, rawScore: null })),
     });
     expect([...value.rows.map((r) => r.memberId)].sort((a, b) => a - b)).toEqual([1, 2, 6, 7]);
@@ -170,7 +171,7 @@ describe("valueFromGame / 既存データの読み込み", () => {
   it("行を素点降順に並べる（一覧の順位順と一致させる）", () => {
     const value = valueFromGame({
       playedOn: "2026-08-26",
-      memo: null,
+      title: null,
       results: [
         { memberId: 2, rawScore: 20000 },
         { memberId: 1, rawScore: 40000 },
@@ -188,10 +189,39 @@ describe("valueFromGame / 既存データの読み込み", () => {
       { memberId: 2, rawScore: 20000 },
       { memberId: 7, rawScore: -10000 },
     ];
-    const value = valueFromGame({ playedOn: "2026-08-26", memo: "m", results });
+    const value = valueFromGame({ playedOn: "2026-08-26", title: "m", results });
     const back = toGameInput(value);
     expect([...back.results].sort((a, b) => a.memberId - b.memberId)).toEqual(
       [...results].sort((a, b) => a.memberId - b.memberId),
     );
+  });
+});
+
+describe("toGameInput / title", () => {
+  const withTitle = (title: string): GameFormValue => ({
+    playedOn: "2026-08-26",
+    title,
+    rows: [
+      { memberId: 1, rawScore: "25000", negative: false },
+      { memberId: 2, rawScore: "25000", negative: false },
+      { memberId: 3, rawScore: "25000", negative: false },
+      { memberId: 4, rawScore: "25000", negative: false },
+    ],
+  });
+
+  it("空文字は null になる", () => {
+    expect(toGameInput(withTitle("")).title).toBeNull();
+  });
+
+  it("空白だけなら null になる（一覧で空の大見出しを作らない）", () => {
+    expect(toGameInput(withTitle("   ")).title).toBeNull();
+  });
+
+  it("前後の空白は落として保存する（保存する値と一覧に出る値を揃える）", () => {
+    expect(toGameInput(withTitle("  第3節  ")).title).toBe("第3節");
+  });
+
+  it("中の空白は残す", () => {
+    expect(toGameInput(withTitle("月例会 8月")).title).toBe("月例会 8月");
   });
 });
