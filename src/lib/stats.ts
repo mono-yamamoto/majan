@@ -75,6 +75,20 @@ export type TeamStats = {
  * 個人成績（`members`）には通常どおり含まれるので、`MemberStats` を重複して持たない。
  * 全項目が要るなら `members` から memberId で引けばよく、二重に持つと食い違う余地ができる。
  */
+/**
+ * 集計から除外した半荘のID。
+ *
+ * `scoreGame` は4件でないと RangeError を投げる（事前条件・T2）。
+ * `games` / `game_results` は運営が SQL で直接触れるので（決定#11）、
+ * 4件でない半荘は作れてしまう。そのまま通すと**戦績画面全体が落ちて**
+ * 閲覧者10人全員が画面を失う。
+ *
+ * 除外はするが**黙って落とさない**。呼び出し側が警告を出せるように返す。
+ * 目的は「1件の壊れたデータで全員が画面を失う」ことを防ぐことであって、
+ * 「壊れていることを隠す」ことではない。
+ */
+export type BrokenGames = number[];
+
 export type UnassignedStats = {
   /** 所属が引けなかったメンバー。空配列なら健全 */
   memberIds: number[];
@@ -140,8 +154,22 @@ export function computeStats(
   games: StatsGame[],
   roster: Roster,
   rule: LeagueRule,
-): { members: MemberStats[]; teams: TeamStats[]; unassigned: UnassignedStats } {
-  const ordered = [...games].sort(byPlayedOnThenId);
+): {
+  members: MemberStats[];
+  teams: TeamStats[];
+  unassigned: UnassignedStats;
+  broken: BrokenGames;
+} {
+  // 4件でない半荘は scoreGame の事前条件を満たさないので集計から外す（→ BrokenGames）
+  const playersPerGame = rule.uma.length;
+  const broken: BrokenGames = [];
+  const ordered = [...games]
+    .filter((g) => {
+      if (g.results.length === playersPerGame) return true;
+      broken.push(g.id);
+      return false;
+    })
+    .sort(byPlayedOnThenId);
 
   const acc = new Map<number, Accumulator>();
   const ensure = (memberId: number): Accumulator => {
@@ -233,6 +261,7 @@ export function computeStats(
       memberIds: [...unassignedIds].sort((a, b) => a - b),
       totalPt: unassignedDeci / DECI_PER_PT,
     },
+    broken: [...broken].sort((a, b) => a - b),
   };
 }
 

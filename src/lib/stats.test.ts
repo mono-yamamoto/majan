@@ -460,6 +460,67 @@ describe("computeStats / roster に無いメンバー（unassigned）", () => {
   });
 });
 
+describe("computeStats / 4件でない半荘（broken）", () => {
+  /**
+   * ★1件の壊れたデータで全員が画面を失うのを防ぐ★
+   * scoreGame は4件でないと RangeError を投げる（事前条件・T2）。
+   * games / game_results は運営が SQL で直接触れるので（決定#11）、
+   * 4件でない半荘は作れてしまう。そのまま通すと戦績画面全体が落ちる。
+   */
+  const BROKEN: StatsGame[] = [
+    game(1, "2026-08-26", [
+      [1, 42300],
+      [6, 28100],
+      [2, 18400],
+      [7, 11200],
+    ]),
+    // 3人だけの壊れた半荘
+    game(2, "2026-08-27", [
+      [1, 40000],
+      [6, 30000],
+      [2, 30000],
+    ]),
+    // 5人いる壊れた半荘
+    game(3, "2026-08-28", [
+      [1, 20000],
+      [6, 20000],
+      [2, 20000],
+      [7, 20000],
+      [3, 20000],
+    ]),
+  ];
+
+  it("例外を投げずに集計できる（素朴に scoreGame へ渡すと RangeError で落ちる）", () => {
+    expect(() => scoreGame(BROKEN[1].results, RULE)).toThrow(RangeError);
+    expect(() => computeStats(BROKEN, ROSTER, RULE)).not.toThrow();
+  });
+
+  it("壊れた半荘のIDを broken で返す（黙って落とさない）", () => {
+    const { broken } = computeStats(BROKEN, ROSTER, RULE);
+    expect(broken).toEqual([2, 3]);
+  });
+
+  it("健全な半荘だけで集計する", () => {
+    const { members } = computeStats(BROKEN, ROSTER, RULE);
+    const m1 = members.find((m) => m.memberId === 1);
+    expect(m1?.gameCount).toBe(1);
+    expect(m1?.totalPt).toBe(62.3);
+    // 除外した半荘は累計推移にも現れない
+    expect(m1?.cumulative.map((c) => c.gameId)).toEqual([1]);
+  });
+
+  it("除外後も不変条件が成立する（Σ合計pt = 0 / Σ半荘数 = 4 x 有効半荘数）", () => {
+    const { members, teams, unassigned } = computeStats(BROKEN, ROSTER, RULE);
+    expect(members.reduce((sum, m) => sum + deci(m.totalPt), 0)).toBe(0);
+    expect(members.reduce((sum, m) => sum + m.gameCount, 0)).toBe(4 * 1);
+    expect(teams.reduce((sum, t) => sum + deci(t.totalPt), 0) + deci(unassigned.totalPt)).toBe(0);
+  });
+
+  it("健全なデータなら broken は空", () => {
+    expect(computeStats(GAMES, ROSTER, RULE).broken).toEqual([]);
+  });
+});
+
 describe("computeStats / 削除済み半荘は入力の時点で除外されている前提", () => {
   it("渡さなかった半荘は集計に現れない", () => {
     const withAll = computeStats(GAMES, ROSTER, RULE).members.find((m) => m.memberId === 1);
