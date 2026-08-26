@@ -140,8 +140,15 @@ CREATE TABLE games (
   -- YYYY-MM-DD の実在日付だけを許す（→ 日付の検証）
   CHECK (
     played_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
-    AND date(played_on) IS NOT NULL
-    AND date(played_on) = played_on
+    AND CAST(substr(played_on, 6, 2) AS INTEGER) BETWEEN 1 AND 12
+    AND CAST(substr(played_on, 9, 2) AS INTEGER) BETWEEN 1 AND
+        CASE CAST(substr(played_on, 6, 2) AS INTEGER)
+          WHEN 2 THEN CASE WHEN CAST(substr(played_on, 1, 4) AS INTEGER) % 4 = 0
+                            AND (CAST(substr(played_on, 1, 4) AS INTEGER) % 100 <> 0
+                                 OR CAST(substr(played_on, 1, 4) AS INTEGER) % 400 = 0)
+                       THEN 29 ELSE 28 END
+          WHEN 4 THEN 30 WHEN 6 THEN 30 WHEN 9 THEN 30 WHEN 11 THEN 30
+          ELSE 31 END
   )
 ) STRICT;
 
@@ -203,29 +210,44 @@ SQLite は `ALTER TABLE` で外部キーを追加できない。後から入れ�
 
 `played_on` は `TEXT` なので、素朴に `NOT NULL` を付けただけでは `'banana'` も `''` も `'2026-13-99'` も入る（実測確認済み）。日付でグルーピング表示する設計（決定#5）なので、ここが壊れると一覧が崩れる。
 
-3つの条件を **AND で全部** 並べる必要がある。
+**形式（`GLOB`）+ 月の範囲 + その月の日数**を算術で検査する。`date()` 関数は使わない。
 
 ```sql
 CHECK (
-  played_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'  -- 形式
-  AND date(played_on) IS NOT NULL                              -- NULL比較の穴を塞ぐ
-  AND date(played_on) = played_on                              -- 実在日付か
+  played_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+  AND CAST(substr(played_on, 6, 2) AS INTEGER) BETWEEN 1 AND 12
+  AND CAST(substr(played_on, 9, 2) AS INTEGER) BETWEEN 1 AND
+      CASE CAST(substr(played_on, 6, 2) AS INTEGER)
+        WHEN 2 THEN CASE WHEN CAST(substr(played_on, 1, 4) AS INTEGER) % 4 = 0
+                          AND (CAST(substr(played_on, 1, 4) AS INTEGER) % 100 <> 0
+                               OR CAST(substr(played_on, 1, 4) AS INTEGER) % 400 = 0)
+                     THEN 29 ELSE 28 END
+        WHEN 4 THEN 30 WHEN 6 THEN 30 WHEN 9 THEN 30 WHEN 11 THEN 30
+        ELSE 31 END
 )
 ```
 
-| 条件 | これだけだと通ってしまうもの |
-|---|---|
-| `GLOB` のみ | `'2026-13-99'` `'2026-02-30'`（形式は合っているが実在しない） |
-| `date(x) = x` のみ | `'banana'` `'2026-13-99'` `'2026-8-6'` |
-| 上記2つ（`IS NOT NULL` なし） | `'2026-13-99'` `'2026-00-10'` |
+<Aside type="danger" title="date() を使った実在日付チェックは SQLite のバージョンで挙動が変わる">
+一見すると `CHECK (date(played_on) = played_on)` で実在日付を判定できそうに見えるが、**これはバージョン依存**で、実測すると次のように割れる。
 
-<Aside type="caution" title="date() は不正な入力に NULL を返す — CHECK は NULL を「合格」とみなす">
-`date('banana')` も `date('2026-13-99')` も **NULL** を返す。SQLite の `CHECK` は式が **偽のときだけ** 拒否し、**NULL のときは通す**。つまり `CHECK (played_on = date(played_on))` は「日付として解釈できない値」を**素通りさせる**。`AND date(played_on) IS NOT NULL` を挟んで初めて塞がる。
+| 入力 | SQLite 3.51 の `date()` | SQLite 3.32.3 の `date()` |
+|---|---|---|
+| `'2026-02-30'` | `'2026-03-02'` に**正規化** → 弾ける | **`'2026-02-30'` のまま** → **通ってしまう** |
+| `'2025-02-29'` | `'2025-03-01'` → 弾ける | **そのまま** → **通ってしまう** |
+| `'2026-04-31'` | `'2026-05-01'` → 弾ける | **そのまま** → **通ってしまう** |
 
-なお `date('2026-02-30')` は NULL ではなく **`'2026-03-02'` に正規化**されて返る。この場合は `= played_on` が偽になるので弾ける。壊れ方が入力によって違うので、3条件をすべて並べるのが確実。
+D1 は `sqlite_version()` の呼び出しを許可していない（`not authorized to use function`）ため、**本番のバージョンを直接確認する手段が無い**。上の算術版なら `substr` / `CAST` / `CASE` という最も古い機能しか使わないので、**どのバージョンでも同じ結果になる**。
+
+さらに `date()` にはもう一つ罠がある。`date('banana')` は **NULL** を返し、SQLite の `CHECK` は式が**偽のときだけ拒否して NULL は通す**ので、`date(x) = x` 単体では「日付として解釈できない値」が素通りする。算術版はこの問題も持たない。
 </Aside>
 
-15パターンで検証済み（`2024-02-29` は通り `2025-02-29` は弾く、`UPDATE` でも効く）。
+<Aside type="note" title="この CHECK は validation.ts と同じ規則を書いている">
+`src/lib/validation.ts` 側も `Date` を使わず正規表現 + 同じ閏年規則（4 / 100 / 400）で判定する。**両者が同じ規則を明示的に書いている**ので、一致は偶然ではない。
+
+`Date` を使わない理由は JS 側にもある。`new Date('2026-02-30')` は 3/2 に繰り上がり、`new Date('2026-8-6')` はレガシーパーサが受理し、`new Date('2026/08/26')` はローカルタイム解釈になってタイムゾーン次第で前日にずれる。さらに `Date.UTC(0, 0, 1)` は **1900-01-01** を返す（0〜99 の年が 1900+n に写像される仕様）ため、`'0000-01-01'` は `Date` 系では原理的に扱えない。
+</Aside>
+
+**1,289 パターン**で検証済み（年18種 × 月10種 × 日7種 + 全角数字・アラビア数字・タブ・前後改行・前後スペース・`20260826`・`+2026-08-26` など異形式29種）。SQLite **3.51 と 3.32.3 の結果が完全一致**し、`validation.ts` の TS 実装とも**不一致 0 件**。`UPDATE` でも効く。
 
 ## 書き込みの原子性
 
@@ -288,7 +310,7 @@ export const requirePasscode: MiddlewareHandler<{ Bindings: Bindings }> = async 
 
 - `migrations/` に連番SQLを置き、`wrangler d1 migrations apply` が未適用分を順に流す（適用履歴は D1 が `d1_migrations` テーブルで管理）
 - 旧構成の自前ランナー（`db/migrate.ts` + `PRAGMA user_version`）は**不要になった**
-- 型は生成せず、`src/lib/types.ts` に**手書き**する（テーブル7個・カラム30個弱なので生成ツールに見合わない）
+- 型は生成せず、`src/lib/types.ts` に**手書き**する（テーブル6個・カラム30個弱なので生成ツールに見合わない）。D1 が自動で作る `d1_migrations` はアプリから触らないので型を書かない
 - 初期データ（メンバー10人・リーグ・チーム・所属）は **`db/seed.local.sql`**。`db/seed.sql` はプレースホルダ名のテンプレートで、**実名を書かずにコミットする**（→ [使い方](/spec/usage/#リーグ立ち上げ運営シーズン開始時に1回)）
 
 ```bash
