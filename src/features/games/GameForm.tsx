@@ -87,16 +87,7 @@ export function GameForm({
   const nameOf = (id: number) => members.find((m) => m.id === id)?.name ?? `#${id}`;
   const canSubmit = complete && errors.length === 0;
 
-  // チームごとの見た目。teams は2つ想定だが、増えても壊れないよう index で回す
-  const teamStyles = ["bg-sky-500", "bg-rose-500", "bg-emerald-500", "bg-amber-500"];
-  const teamIndex = (teamId: number | undefined) =>
-    teamId === undefined ? -1 : teams.findIndex((t) => t.id === teamId);
   const teamOf = (memberId: number) => teams.find((t) => t.id === roster.get(memberId));
-  /** 選択肢に出す表示名。誰がどのチームかが**選ぶ前に**分かるようにする */
-  const optionLabel = (m: { id: number; name: string }) => {
-    const team = teamOf(m.id);
-    return team === undefined ? m.name : `${m.name}（${team.name}）`;
-  };
 
   const setRow = (index: number, patch: Partial<GameFormRow>) => {
     const rows = value.rows.map((row, i) => (i === index ? updateRow(row, patch) : row));
@@ -124,15 +115,6 @@ export function GameForm({
       <div className="mt-6 space-y-3">
         {value.rows.map((row, index) => (
           <div key={index} className="flex items-center gap-2">
-            {/* 選択済みのチームを色で示す。2-2 になっているかがひと目で分かる */}
-            <span
-              className={`h-9 w-1.5 shrink-0 rounded-full ${
-                teamIndex(roster.get(row.memberId)) >= 0
-                  ? teamStyles[teamIndex(roster.get(row.memberId)) % teamStyles.length]
-                  : "bg-border"
-              }`}
-              aria-hidden="true"
-            />
             <select
               className={`border-input h-9 min-w-0 flex-1 rounded-lg border bg-transparent px-2 text-sm ${
                 badMemberIds.has(row.memberId) ? "border-destructive" : ""
@@ -142,16 +124,16 @@ export function GameForm({
               aria-label={`${index + 1}人目`}
             >
               <option value={0}>選択</option>
-              {/* チームごとに分ける。あわせて名前にもチーム名を付ける。
-                  optgroup のラベルが出ない端末でも、選ぶ前にチームが分かるようにするため
-                  （利用者から「どのチームか分からず登録できない」と指摘があった箇所） */}
+              {/* チームごとに分ける。選ぶ前にチームが分かるようにするため
+                  （利用者から「どのチームか分からず登録できない」と指摘があった箇所）。
+                  名前にチーム名を重ねるのは冗長という指摘があったので optgroup だけにしている */}
               {teams.map((team) => (
                 <optgroup key={team.id} label={team.name}>
                   {members
                     .filter((m) => roster.get(m.id) === team.id)
                     .map((m) => (
                       <option key={m.id} value={m.id}>
-                        {optionLabel(m)}
+                        {m.name}
                       </option>
                     ))}
                 </optgroup>
