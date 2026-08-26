@@ -34,6 +34,9 @@ export function describeFailure(failure: ApiFailure): string {
     case "misconfigured":
       // パスコードの問題ではないので、入力し直させない
       return "サーバー設定に問題があります。運営に連絡してください";
+    case "serverError":
+      // 設定ミスではないので運営への連絡を促さない
+      return "サーバーが一時的に応答していません。しばらくしてからもう一度お試しください";
     case "notFound":
       return "対象が見つかりません（削除済みの可能性があります）";
     case "tooLarge":

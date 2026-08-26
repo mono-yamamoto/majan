@@ -17,6 +17,20 @@ function stubFetch(status: number, body: unknown, delayMs = 10) {
   return calls;
 }
 
+/** JSON でないボディ（SPA fallback の HTML など）を返す */
+function stubNonJsonFetch(status: number) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => {
+        throw new SyntaxError("Unexpected token '<'");
+      },
+    })) as unknown as typeof fetch,
+  );
+}
+
 const INPUT = {
   playedOn: "2026-08-26",
   memo: null,
@@ -136,6 +150,53 @@ describe("api / リーグ一覧", () => {
     if (result.ok) expect(result.data.leagues.map((l) => l.id)).toEqual([1, 2]);
     vi.unstubAllGlobals();
   });
+});
+
+describe("api / 応答が JSON でない場合", () => {
+  /**
+   * ★白画面になる実クラッシュ経路★
+   * run_worker_first の設定ミスやパスのタイポで /api/* が SPA fallback に落ちると
+   * HTML の 200 が返る。これを成功として扱うと、呼び出し側が
+   * response.members.map で TypeError を投げて画面が真っ白になる。
+   */
+  it("200 でも JSON でなければ成功にしない", async () => {
+    stubNonJsonFetch(200);
+    const { fetchLeague } = await import("./api");
+    const result = await fetchLeague(1);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.kind).toBe("network");
+    vi.unstubAllGlobals();
+  });
+
+  it("エラー応答が JSON でなくても status に応じた kind になる", async () => {
+    stubNonJsonFetch(401);
+    const result = await createGame(1, INPUT, "pc");
+    if (!result.ok) expect(result.kind).toBe("unauthorized");
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("api / 5xx の切り分け", () => {
+  it("500 は misconfigured（運営に連絡すれば直る）", async () => {
+    stubFetch(500, { error: "server misconfigured: WRITE_PASSCODE is not set" }, 0);
+    const result = await createGame(1, INPUT, "pc");
+    if (!result.ok) expect(result.kind).toBe("misconfigured");
+    vi.unstubAllGlobals();
+  });
+
+  it.each([502, 503, 522])(
+    "%i は serverError（時間を置けば直るので運営に連絡させない）",
+    async (status) => {
+      stubFetch(status, null, 0);
+      const result = await createGame(1, INPUT, "pc");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.kind).toBe("serverError");
+        expect(result.status).toBe(status);
+      }
+      vi.unstubAllGlobals();
+    },
+  );
 });
 
 describe("api / X-Passcode の付与", () => {

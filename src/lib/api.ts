@@ -17,8 +17,10 @@ export type ApiFailure =
   | { ok: false; kind: "validation"; status: 400; errors: ValidationError[] }
   /** パスコード不一致。保存済みの値を消して入力し直してもらう */
   | { ok: false; kind: "unauthorized"; status: 401; message: string }
-  /** サーバーの設定ミス。パスコードの問題ではないので、入力し直させない */
+  /** サーバーの設定ミス（500）。パスコードの問題ではないので、入力し直させない */
   | { ok: false; kind: "misconfigured"; status: 500; message: string }
+  /** 502/503/522 など。Cloudflare 側の一時的な不調なので、時間を置けば直る */
+  | { ok: false; kind: "serverError"; status: number; message: string }
   /** 対象が見つからない（削除済みの可能性） */
   | { ok: false; kind: "notFound"; status: 404; message: string }
   /** 入力が大きすぎる */
@@ -92,12 +94,23 @@ function toFailure(status: number, body: unknown): ApiFailure {
   if (status === 413) {
     return { ok: false, kind: "tooLarge", status: 413, message: message || "入力が大きすぎます" };
   }
-  if (status >= 500) {
+  // 500 と 502/503/522 を分ける。前者はこちらの設定ミス（運営に連絡すれば直る）、
+  // 後者は Cloudflare 側の一時的な不調（時間を置けば直る）。同じ文言にすると、
+  // 一時的な不調のたびに運営へ連絡が飛ぶ。
+  if (status === 500) {
     return {
       ok: false,
       kind: "misconfigured",
       status: 500,
       message: message || "サーバー側の問題です",
+    };
+  }
+  if (status > 500) {
+    return {
+      ok: false,
+      kind: "serverError",
+      status,
+      message: message || "サーバーが一時的に応答していません",
     };
   }
   return { ok: false, kind: "badRequest", status, message: message || "リクエストが不正です" };
@@ -133,13 +146,26 @@ async function request<T>(
     });
 
     let body: unknown = null;
+    let parsed = true;
     try {
       body = await res.json();
     } catch {
-      body = null;
+      parsed = false;
     }
 
     if (!res.ok) return toFailure(res.status, body);
+
+    // 2xx でも JSON でなければ成功にしない。run_worker_first の設定ミスやパスの
+    // タイポで /api/* が SPA fallback に落ちると HTML 200 が返り、
+    // そのまま data として扱うと呼び出し側が undefined を触って白画面になる。
+    if (!parsed) {
+      return {
+        ok: false,
+        kind: "network",
+        status: 0,
+        message: "サーバーの応答を読めませんでした",
+      };
+    }
     return { ok: true, data: body as T };
   } catch {
     return {

@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import { fetchLeague, type ApiFailure, type LeagueResponse } from "@/lib/api";
 import { LeagueContext, describeFailure, type LeagueData } from "@/lib/league-context";
 import type { Roster } from "@/lib/validation";
@@ -52,12 +53,27 @@ export function LeagueProvider({
     return <p className="text-muted-foreground p-6 text-sm">読み込み中…</p>;
   }
   if (state.status === "error") {
+    // リーグに論理削除は無いので、games 向けの「削除済みの可能性があります」を
+    // そのまま出すと誤解を招く。古いブックマークで前シーズンの id を開く経路が
+    // 現実にあるので、トップ（リーグ一覧）へ戻れるようにする。
+    const message =
+      state.failure.kind === "notFound"
+        ? "このリーグは見つかりませんでした。URL が古い可能性があります"
+        : describeFailure(state.failure);
+
     return (
-      <div className="p-6">
-        <p className="text-destructive text-sm">{describeFailure(state.failure)}</p>
-        <button type="button" className="mt-4 text-sm underline" onClick={reload}>
-          再読み込み
-        </button>
+      <div className="mx-auto max-w-screen-sm p-6">
+        <p className="text-destructive text-sm">{message}</p>
+        <div className="mt-4 flex gap-4 text-sm">
+          <Link to="/" className="underline">
+            リーグ一覧へ
+          </Link>
+          {state.failure.kind === "notFound" ? null : (
+            <button type="button" className="underline" onClick={reload}>
+              再読み込み
+            </button>
+          )}
+        </div>
       </div>
     );
   }

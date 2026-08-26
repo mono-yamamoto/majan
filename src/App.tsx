@@ -47,7 +47,9 @@ function Header() {
 /** :leagueId を読んでデータを1回だけ取得し、配下の画面に配る */
 function LeagueLayout({ children }: { children: React.ReactNode }) {
   const { leagueId } = useParams();
-  const id = Number(leagueId);
+  // Number() だと "1e2" や "0x10" を受理してしまう。API 側の parseId と同じく
+  // ^\d+$ に揃えて、URL の解釈がフロントとサーバーで食い違わないようにする。
+  const id = leagueId !== undefined && /^\d+$/.test(leagueId) ? Number(leagueId) : Number.NaN;
   if (!Number.isSafeInteger(id) || id <= 0) return <Navigate to="/" replace />;
 
   return (
