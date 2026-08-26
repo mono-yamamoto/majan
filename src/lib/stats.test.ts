@@ -1,0 +1,369 @@
+import { describe, expect, it } from "vite-plus/test";
+import { scoreGame, type LeagueRule } from "./scoring";
+import { computeStats, rankMembers, type StatsGame } from "./stats";
+import type { Roster } from "./validation";
+
+const RULE: LeagueRule = { startPoint: 25000, returnPoint: 30000, uma: [30, 10, -10, -30] };
+
+/** チームA = 1,2,3 / チームB = 6,7,8。5 と 9 は未出場の要員 */
+const ROSTER: Roster = new Map([
+  [1, 1],
+  [2, 1],
+  [3, 1],
+  [5, 1],
+  [6, 2],
+  [7, 2],
+  [8, 2],
+  [9, 2],
+]);
+
+const game = (id: number, playedOn: string, rows: [number, number][]): StatsGame => ({
+  id,
+  playedOn,
+  results: rows.map(([memberId, rawScore]) => ({ memberId, rawScore })),
+});
+
+/** 同点なし / トップ同点 / 3人トップ同点 を含み、5 と 9 は一度も出場しない */
+const GAMES: StatsGame[] = [
+  game(1, "2026-08-26", [
+    [1, 42300],
+    [6, 28100],
+    [2, 18400],
+    [7, 11200],
+  ]),
+  game(2, "2026-08-26", [
+    [1, 35000],
+    [6, 35000],
+    [2, 20000],
+    [7, 10000],
+  ]),
+  game(3, "2026-08-27", [
+    [1, 30000],
+    [6, 30000],
+    [2, 30000],
+    [7, 10000],
+  ]),
+  game(4, "2026-08-28", [
+    [3, 40000],
+    [8, 20000],
+    [1, 20000],
+    [6, 20000],
+  ]),
+];
+
+const deci = (pt: number): number => Math.round(pt * 10);
+const byId = (memberId: number) =>
+  computeStats(GAMES, ROSTER, RULE).members.find((m) => m.memberId === memberId);
+
+// ---------------------------------------------------------------------------
+// 独立オラクル: 実装とは別の書き方（素朴な二重ループ）で同じ値を組み直す。
+// 不変条件は「合計が合う」タイプばかりで、個々の値の正しさは保証しない
+// （T2 の教訓: 全員 pt=0 を返す実装でも 650,491件の sweep を通った）。
+// ---------------------------------------------------------------------------
+function naiveStats(games: StatsGame[], rule: LeagueRule, memberId: number) {
+  let gameCount = 0;
+  let totalPtDeci = 0;
+  let occupiedSumTimesTwo = 0;
+  const rankCounts = [0, 0, 0, 0];
+  const raws: number[] = [];
+  const cumulative: number[] = [];
+
+  const ordered = [...games].sort((a, b) =>
+    a.playedOn < b.playedOn ? -1 : a.playedOn > b.playedOn ? 1 : a.id - b.id,
+  );
+
+  for (const g of ordered) {
+    const scored = scoreGame(g.results, rule);
+    for (const s of scored) {
+      if (s.memberId !== memberId) continue;
+      gameCount++;
+      totalPtDeci += deci(s.pt);
+      // 占める順位: 自分と同じ rank の人数から求める
+      let sameRank = 0;
+      for (const o of scored) if (o.rank === s.rank) sameRank++;
+      occupiedSumTimesTwo += 2 * s.rank + sameRank - 1;
+      rankCounts[s.rank - 1]++;
+      raws.push(s.rawScore);
+      cumulative.push(totalPtDeci / 10);
+    }
+  }
+
+  return {
+    gameCount,
+    totalPt: totalPtDeci / 10,
+    averagePt: gameCount === 0 ? null : totalPtDeci / 10 / gameCount,
+    averageRank: gameCount === 0 ? null : occupiedSumTimesTwo / 2 / gameCount,
+    rankCounts,
+    maxRawScore: raws.length === 0 ? null : Math.max(...raws),
+    minRawScore: raws.length === 0 ? null : Math.min(...raws),
+    cumulative,
+  };
+}
+
+describe("computeStats / 独立オラクルとの一致", () => {
+  it.each([1, 2, 3, 5, 6, 7, 8, 9])("memberId %i の全項目が素朴な実装と一致する", (memberId) => {
+    const actual = byId(memberId);
+    const expected = naiveStats(GAMES, RULE, memberId);
+
+    expect(actual).toBeDefined();
+    expect(actual?.gameCount).toBe(expected.gameCount);
+    expect(deci(actual?.totalPt ?? 0)).toBe(deci(expected.totalPt));
+    expect(actual?.averagePt).toBe(expected.averagePt);
+    expect(actual?.averageRank).toBe(expected.averageRank);
+    expect(actual?.rankCounts).toEqual(expected.rankCounts);
+    expect(actual?.maxRawScore).toBe(expected.maxRawScore);
+    expect(actual?.minRawScore).toBe(expected.minRawScore);
+    expect(actual?.cumulative.map((c) => deci(c.totalPt))).toEqual(expected.cumulative.map(deci));
+  });
+});
+
+describe("computeStats / 不変条件", () => {
+  const { members } = computeStats(GAMES, ROSTER, RULE);
+  const gameCount = GAMES.length;
+
+  it("1. 1人あたり 1〜4着回数の合計 = その人の半荘数", () => {
+    for (const m of members) {
+      expect(m.rankCounts.reduce((a, b) => a + b, 0)).toBe(m.gameCount);
+    }
+  });
+
+  it("2. 全メンバーの半荘数の総和 = 4 x 半荘数", () => {
+    expect(members.reduce((sum, m) => sum + m.gameCount, 0)).toBe(4 * gameCount);
+  });
+
+  it("3. 全メンバーの「占める順位」の総和 = 10 x 半荘数（rank を素朴に足すと合わない）", () => {
+    // averageRank x gameCount が「占める順位の総和」。2倍して整数で比べる
+    const sumTimesTwo = members.reduce(
+      (sum, m) => sum + (m.averageRank === null ? 0 : Math.round(m.averageRank * 2 * m.gameCount)),
+      0,
+    );
+    expect(sumTimesTwo).toBe(20 * gameCount);
+
+    // 素朴に rank を足すと 10 x 半荘数 にならないことも示しておく
+    const naiveRankSum = GAMES.reduce(
+      (sum, g) => sum + scoreGame(g.results, RULE).reduce((s, x) => s + x.rank, 0),
+      0,
+    );
+    expect(naiveRankSum).toBeLessThan(10 * gameCount);
+  });
+
+  it("4. 全メンバーの合計pt の総和 = 0（deci 整数で厳密に）", () => {
+    expect(members.reduce((sum, m) => sum + deci(m.totalPt), 0)).toBe(0);
+  });
+
+  it("5. 累計pt推移の最終点 = 合計pt / 点数 = 半荘数 / x軸が playedOn, id 順", () => {
+    for (const m of members) {
+      expect(m.cumulative.length).toBe(m.gameCount);
+      if (m.gameCount > 0) {
+        expect(deci(m.cumulative[m.cumulative.length - 1].totalPt)).toBe(deci(m.totalPt));
+      }
+      const keys = m.cumulative.map((c) => `${c.playedOn}#${String(c.gameId).padStart(6, "0")}`);
+      expect(keys).toEqual([...keys].sort());
+    }
+  });
+});
+
+describe("computeStats / 半荘数0 のメンバー（NaN / Infinity を返さない）", () => {
+  const zero = byId(5);
+
+  it("未定義の指標はすべて null", () => {
+    expect(zero?.gameCount).toBe(0);
+    expect(zero?.totalPt).toBe(0);
+    expect(zero?.averagePt).toBeNull();
+    expect(zero?.averageRank).toBeNull();
+    expect(zero?.rankRates).toEqual([null, null, null, null]);
+    expect(zero?.topRate).toBeNull();
+    expect(zero?.lastRate).toBeNull();
+    expect(zero?.maxRawScore).toBeNull();
+    expect(zero?.minRawScore).toBeNull();
+    expect(zero?.cumulative).toEqual([]);
+  });
+
+  it("着順回数は 0 で、NaN や ±Infinity を含まない", () => {
+    expect(zero?.rankCounts).toEqual([0, 0, 0, 0]);
+    const values = [zero?.averagePt, zero?.averageRank, zero?.maxRawScore, zero?.minRawScore];
+    for (const v of values) {
+      expect(Number.isNaN(v as number)).toBe(false);
+      expect(v).not.toBe(Infinity);
+      expect(v).not.toBe(-Infinity);
+    }
+  });
+
+  it("半荘が1件も無ければ全員が半荘数0（リーグ開始直後）", () => {
+    const { members } = computeStats([], ROSTER, RULE);
+    expect(members).toHaveLength(ROSTER.size);
+    expect(members.every((m) => m.gameCount === 0 && m.averagePt === null)).toBe(true);
+  });
+});
+
+describe("computeStats / 平均順位は占める順位で数える", () => {
+  it("3人トップ同点の半荘だけなら、上位3人の平均順位は 2.0・4位は 4.0", () => {
+    const { members } = computeStats([GAMES[2]], ROSTER, RULE);
+    const rankOf = (id: number) => members.find((m) => m.memberId === id)?.averageRank;
+    // rank は 1,1,1,4 だが占める順位は 2,2,2,4
+    expect(rankOf(1)).toBe(2);
+    expect(rankOf(6)).toBe(2);
+    expect(rankOf(2)).toBe(2);
+    expect(rankOf(7)).toBe(4);
+  });
+
+  it("2位が2人同点なら 1, 2.5, 2.5, 4", () => {
+    const g = game(9, "2026-09-01", [
+      [1, 40000],
+      [6, 25000],
+      [2, 25000],
+      [7, 10000],
+    ]);
+    const { members } = computeStats([g], ROSTER, RULE);
+    const rankOf = (id: number) => members.find((m) => m.memberId === id)?.averageRank;
+    expect([rankOf(1), rankOf(6), rankOf(2), rankOf(7)]).toEqual([1, 2.5, 2.5, 4]);
+  });
+
+  it("全員同点なら全員 2.5", () => {
+    const g = game(9, "2026-09-01", [
+      [1, 25000],
+      [6, 25000],
+      [2, 25000],
+      [7, 25000],
+    ]);
+    const { members } = computeStats([g], ROSTER, RULE);
+    expect(members.filter((m) => m.gameCount > 0).map((m) => m.averageRank)).toEqual([
+      2.5, 2.5, 2.5, 2.5,
+    ]);
+  });
+});
+
+describe("computeStats / 同点1位は全員1着", () => {
+  it("3人トップ同点では1着が3人、2着と3着は0人", () => {
+    const { members } = computeStats([GAMES[2]], ROSTER, RULE);
+    const played = members.filter((m) => m.gameCount > 0);
+    const totals = [0, 1, 2, 3].map((i) => played.reduce((s, m) => s + m.rankCounts[i], 0));
+    expect(totals).toEqual([3, 0, 0, 1]);
+  });
+
+  it("横に足すと半荘数と合わないが、1人あたりでは必ず一致する", () => {
+    const { members } = computeStats(GAMES, ROSTER, RULE);
+    const across = [0, 1, 2, 3].map((i) => members.reduce((s, m) => s + m.rankCounts[i], 0));
+    // 4半荘だが 1着は 4回にならない（同点1位を全員数えるため）
+    expect(across[0]).toBeGreaterThan(GAMES.length);
+    for (const m of members) {
+      expect(m.rankCounts.reduce((a, b) => a + b, 0)).toBe(m.gameCount);
+    }
+  });
+});
+
+describe("computeStats / deci 整数で集計する", () => {
+  it("同じ pt を10回足しても誤差が出ない（float の reduce なら壊れる）", () => {
+    // 3人トップ同点（pt = 16.7）の半荘を10回
+    const games = Array.from({ length: 10 }, (_, i) =>
+      game(i + 1, "2026-08-26", [
+        [1, 30000],
+        [6, 30000],
+        [2, 30000],
+        [7, 10000],
+      ]),
+    );
+    const { members } = computeStats(games, ROSTER, RULE);
+    const m1 = members.find((m) => m.memberId === 1);
+    expect(m1?.totalPt).toBe(167);
+    // 素朴に float で足すと 166.99999999999997 になることを示す
+    const naive = Array.from({ length: 10 }, () => 16.7).reduce((a, b) => a + b, 0);
+    expect(naive).not.toBe(167);
+  });
+
+  it("数学的に同点の2人が合計ptで厳密に等しくなる", () => {
+    const games = Array.from({ length: 10 }, (_, i) =>
+      game(i + 1, "2026-08-26", [
+        [1, 35000],
+        [6, 35000],
+        [2, 20000],
+        [7, 10000],
+      ]),
+    );
+    const { members } = computeStats(games, ROSTER, RULE);
+    const a = members.find((m) => m.memberId === 1)?.totalPt;
+    const b = members.find((m) => m.memberId === 6)?.totalPt;
+    expect(a).toBe(b);
+  });
+});
+
+describe("computeStats / チーム集計", () => {
+  const { members, teams } = computeStats(GAMES, ROSTER, RULE);
+
+  it("チーム合計pt = 所属メンバーの pt 総和", () => {
+    for (const t of teams) {
+      const expected = members
+        .filter((m) => ROSTER.get(m.memberId) === t.teamId)
+        .reduce((sum, m) => sum + deci(m.totalPt), 0);
+      expect(deci(t.totalPt)).toBe(expected);
+    }
+  });
+
+  it("チーム累計推移の最終点 = チーム合計pt", () => {
+    for (const t of teams) {
+      expect(deci(t.cumulative[t.cumulative.length - 1].totalPt)).toBe(deci(t.totalPt));
+    }
+  });
+
+  it("2-2固定なので両チームの出場半荘数が一致する", () => {
+    expect(teams[0].gameCount).toBe(teams[1].gameCount);
+  });
+});
+
+describe("computeStats / 削除済み半荘は入力の時点で除外されている前提", () => {
+  it("渡さなかった半荘は集計に現れない", () => {
+    const withAll = computeStats(GAMES, ROSTER, RULE).members.find((m) => m.memberId === 1);
+    const withoutLast = computeStats(GAMES.slice(0, 3), ROSTER, RULE).members.find(
+      (m) => m.memberId === 1,
+    );
+    expect(withAll?.gameCount).toBe(4);
+    expect(withoutLast?.gameCount).toBe(3);
+    expect(withoutLast?.cumulative.some((c) => c.gameId === 4)).toBe(false);
+  });
+});
+
+describe("rankMembers / ソート順", () => {
+  const { members } = computeStats(GAMES, ROSTER, RULE);
+  const ranked = rankMembers(members);
+
+  it("合計pt 降順で、未出場者は末尾に来る", () => {
+    const played = ranked.filter((m) => m.gameCount > 0);
+    const notPlayed = ranked.filter((m) => m.gameCount === 0);
+    expect(ranked.slice(0, played.length).every((m) => m.gameCount > 0)).toBe(true);
+    expect(notPlayed.map((m) => m.memberId)).toEqual([5, 9]);
+    for (let i = 1; i < played.length; i++) {
+      expect(deci(played[i - 1].totalPt)).toBeGreaterThanOrEqual(deci(played[i].totalPt));
+    }
+  });
+
+  it("★未出場者（合計pt 0）がマイナスのメンバーより上に来ない", () => {
+    const negative = ranked.filter((m) => m.gameCount > 0 && m.totalPt < 0);
+    expect(negative.length).toBeGreaterThan(0);
+    const lastNegativeIndex = ranked.findIndex(
+      (m) => m.memberId === negative[negative.length - 1].memberId,
+    );
+    const firstZeroGameIndex = ranked.findIndex((m) => m.gameCount === 0);
+    expect(firstZeroGameIndex).toBeGreaterThan(lastNegativeIndex);
+  });
+
+  it("同値は memberId 昇順で決定的", () => {
+    const games = [
+      game(1, "2026-08-26", [
+        [1, 35000],
+        [6, 35000],
+        [2, 20000],
+        [7, 10000],
+      ]),
+    ];
+    const ranked = rankMembers(computeStats(games, ROSTER, RULE).members);
+    expect(ranked[0].memberId).toBe(1);
+    expect(ranked[1].memberId).toBe(6);
+    expect(ranked[0].totalPt).toBe(ranked[1].totalPt);
+  });
+
+  it("元の配列を壊さない", () => {
+    const before = members.map((m) => m.memberId);
+    rankMembers(members);
+    expect(members.map((m) => m.memberId)).toEqual(before);
+  });
+});
