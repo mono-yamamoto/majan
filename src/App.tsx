@@ -7,6 +7,7 @@ import { EditGamePage } from "@/features/games/EditGamePage";
 import { GamesPage } from "@/features/games/GamesPage";
 import { NewGamePage } from "@/features/games/NewGamePage";
 import { MemberPage } from "@/features/members/MemberPage";
+import { AdminPage } from "@/features/admin/AdminPage";
 import { RulesPage } from "@/features/rules/RulesPage";
 import { StandingsPage } from "@/features/standings/StandingsPage";
 import { LeagueProvider } from "@/components/LeagueProvider";
@@ -114,6 +115,17 @@ export function App() {
           element={
             <LeagueLayout>
               <RulesPage />
+            </LeagueLayout>
+          }
+        />
+        {/* 運営メニュー。ヘッダのナビには出さない（閲覧専用の10人には不要な導線）。
+            URL を知っている運営だけが開く。パスコードは目隠しで、境界ではない
+            （理由は AdminPage の冒頭コメント） */}
+        <Route
+          path="/leagues/:leagueId/admin"
+          element={
+            <LeagueLayout>
+              <AdminPage />
             </LeagueLayout>
           }
         />
