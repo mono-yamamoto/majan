@@ -53,15 +53,28 @@ CREATE TABLE games (
   memo       TEXT,
   created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   deleted_at TEXT,
-  -- YYYY-MM-DD の実在日付だけを許す。3条件すべてが必要:
-  --   GLOB だけだと '2026-13-99' が通る（形式は合うが実在しない）
-  --   date(x) = x だけだと 'banana' が通る（date('banana') は NULL を返し、
-  --     CHECK は式が NULL のとき拒否しないため素通りする）
-  --   IS NOT NULL を足して初めて塞がる
+  -- YYYY-MM-DD の実在日付だけを許す。
+  --
+  -- date() は使わない。date(x) = x による実在判定は SQLite のバージョンに依存し、
+  -- 3.51 は '2026-02-30' を '2026-03-02' に正規化して弾けるが、3.32.3 は
+  -- そのまま返すので**通ってしまう**（実測確認済み）。D1 は sqlite_version() の
+  -- 呼び出しを許可しないため、本番のバージョンを確認する手段が無い。
+  --
+  -- 代わりに GLOB で形を縛り、月・日の範囲を自前で検査する。
+  -- 閏年は 4/100/400 ルールで、src/lib/validation.ts の isValidPlayedOn と
+  -- 同じ規則を SQL 側にも明示する（両者の一致を偶然でなく設計にするため）。
+  -- 使っているのは substr / CAST / BETWEEN / CASE だけなのでバージョンを選ばない。
   CHECK (
     played_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
-    AND date(played_on) IS NOT NULL
-    AND date(played_on) = played_on
+    AND CAST(substr(played_on, 6, 2) AS INTEGER) BETWEEN 1 AND 12
+    AND CAST(substr(played_on, 9, 2) AS INTEGER) BETWEEN 1 AND
+        CASE CAST(substr(played_on, 6, 2) AS INTEGER)
+          WHEN 2 THEN CASE WHEN CAST(substr(played_on, 1, 4) AS INTEGER) % 4 = 0
+                            AND (CAST(substr(played_on, 1, 4) AS INTEGER) % 100 <> 0
+                                 OR CAST(substr(played_on, 1, 4) AS INTEGER) % 400 = 0)
+                       THEN 29 ELSE 28 END
+          WHEN 4 THEN 30 WHEN 6 THEN 30 WHEN 9 THEN 30 WHEN 11 THEN 30
+          ELSE 31 END
   )
 ) STRICT;
 
