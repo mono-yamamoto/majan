@@ -11,7 +11,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-PORT="${PORT:-8787}"
+# 既定を 8787 以外にする。同じマシンで複数セッションが検証しており、
+# 8787 は手動確認用に使われることが多い。PORT=... で上書きできる。
+PORT="${PORT:-8791}"
 BASE="http://localhost:${PORT}"
 PASSCODE="verify-api-passcode"
 LOG="$(mktemp -t verify-api).log"
@@ -36,8 +38,19 @@ jq_field() { # jq_field <JSONパス式> — 標準入力の JSON から値を取
   python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null || echo "<parse error>"
 }
 
+# 自分が起動した wrangler の PID だけを落とす。
+# pkill でパターンに一致するプロセスを消すと、同じマシンで動いている
+# 他セッションの検証サーバーまで巻き込む（実際に巻き込んだ）。
+WRANGLER_PID=""
+stop_worker() {
+  if [ -n "$WRANGLER_PID" ]; then
+    kill "$WRANGLER_PID" >/dev/null 2>&1 || true
+    wait "$WRANGLER_PID" 2>/dev/null || true
+    WRANGLER_PID=""
+  fi
+}
 cleanup() {
-  pkill -f "wrangler dev --port ${PORT}" >/dev/null 2>&1 || true
+  stop_worker
   rm -f .dev.vars.verify .dev.vars.empty
   rm -rf "$PERSIST"
 }
@@ -50,7 +63,7 @@ reset_db() {
 }
 
 start_worker() { # $1: "with-secret" | "without-secret"
-  pkill -f "wrangler dev --port ${PORT}" >/dev/null 2>&1 || true
+  stop_worker
   sleep 2
   # --env-file を必ず渡す。省くと開発者の .dev.vars が自動で読まれてしまい、
   # 「シークレット未設定」の検証が成立しない（実測で確認）。
@@ -63,6 +76,7 @@ start_worker() { # $1: "with-secret" | "without-secret"
     args+=(--env-file .dev.vars.empty)
   fi
   W "${args[@]}" > "$LOG" 2>&1 &
+  WRANGLER_PID=$!
   for _ in $(seq 1 40); do
     sleep 1
     curl -sf -o /dev/null "${BASE}/api/health" && return 0
