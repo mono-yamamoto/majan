@@ -21,7 +21,11 @@ function Header() {
   return (
     <header className="border-border border-b">
       <div className="mx-auto flex max-w-screen-sm items-center justify-between gap-2 px-4 py-3">
-        <Link to={base} className="font-bold">
+        {/* リーグ名は「/」へ向ける。リーグが1つなら即リダイレクトで戻ってくるので
+            体験は変わらず、2つ以上になったときに切り替え導線になる。
+            ここが base（そのリーグの戦績）を指していると、増えた後に
+            URL を手で消すしか切り替える手段が無くなる */}
+        <Link to="/" className="font-bold">
           {league.name}
         </Link>
         <Button

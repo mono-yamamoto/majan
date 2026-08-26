@@ -244,7 +244,11 @@ echo; echo "===== GET /api/leagues（トップのリーグ選択用） ====="
 t 200 'GET /api/leagues はパスコード不要' "${BASE}/api/leagues"
 shape "leagues は { leagues: [...] } で返る" "True" 'isinstance(d.get("leagues"), list)' "${BASE}/api/leagues"
 shape "seed の1リーグが返る"                "1" 'len(d["leagues"])' "${BASE}/api/leagues"
-shape "id と name だけを返す（設定値は含めない）" "id,name" '",".join(sorted(d["leagues"][0].keys()))' "${BASE}/api/leagues"
+shape "新しい順（id 降順）で返る"           "True" 'd["leagues"] == sorted(d["leagues"], key=lambda x: -x["id"])' "${BASE}/api/leagues"
+# 設定値は /api/leagues/:id で誰でも見られるので「漏れる」実害は小さい。
+# 価値はレスポンス形状の変更を意図的にしか行えないようにすること（SELECT * への
+# うっかりした変更を検知する）。狙いを書いておかないと「別に漏れても困らない」と消される。
+shape "レスポンス形状が id と name のまま（意図しない変更の検知）" "id,name" '",".join(sorted(d["leagues"][0].keys()))' "${BASE}/api/leagues"
 shape "name が取れている"                   "2026 秋リーグ" 'd["leagues"][0]["name"]' "${BASE}/api/leagues"
 
 echo; echo "===== WRITE_PASSCODE 未設定でも素通りしない ====="

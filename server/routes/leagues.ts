@@ -19,7 +19,10 @@ export const leagues = new Hono<{ Bindings: Bindings }>();
  * 論理削除の概念が無いテーブルなので全件返す。
  */
 leagues.get("/api/leagues", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT id, name FROM leagues ORDER BY id").all<{
+  const { results } = await c.env.DB.prepare(
+    // 新しいシーズンほど上。古い順だと現行シーズンが一番下に来る
+    "SELECT id, name FROM leagues ORDER BY id DESC",
+  ).all<{
     id: number;
     name: string;
   }>();
