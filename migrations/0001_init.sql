@@ -50,7 +50,7 @@ CREATE TABLE games (
   id         INTEGER PRIMARY KEY,
   league_id  INTEGER NOT NULL REFERENCES leagues(id),
   played_on  TEXT    NOT NULL,
-  memo       TEXT,
+  title       TEXT,
   created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   deleted_at TEXT,
   -- YYYY-MM-DD の実在日付だけを許す。
