@@ -84,6 +84,17 @@ check() { # check <ラベル> <実際> <期待>
   if [ "$2" = "$3" ]; then pass=$((pass+1)); printf 'OK   %-58s %s\n' "$1" "$2"
   else fail=$((fail+1)); printf 'NG!! %-58s 実際=%s 期待=%s\n' "$1" "$2" "$3"; fi
 }
+# 禁止語がコメント中にあるだけの行を数えないよう、// 以降を落としてから数える。
+#
+# 「// を含む行を丸ごと除外」は行末コメント付きの実コード行まで消して false PASS になる。
+# 「// の後ろにその語がある行を除外」でも、行末コメントが同じ語を含むと見逃す
+# （実測: `const x = "last_insert_rowid()"; // last_insert_rowid を使う理由` が 0 になる）。
+# コメント部を落としてから数えれば、どちらの形でも検出できる（原則4）。
+banned_in_code() { # banned_in_code <正規表現> <対象...>
+  local pattern="$1"; shift
+  grep -rnE "$pattern" "$@" 2>/dev/null | sed 's|//.*||' | grep -cE "$pattern" | tr -d ' '
+}
+
 POST() { t "$1" "$2" -X POST "${BASE}/api/games" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" -d "$3"; }
 # shape <ラベル> <期待値> <python式> <curl 引数...> — レスポンスボディの形まで確認する
 shape() {
@@ -240,19 +251,12 @@ check "書き込まれていない（games が増えていない）" "$(Q "SELEC
 echo; echo "===== ビルド成果物に秘密が含まれない ====="
 check "dist/ に WRITE_PASSCODE が無い" "$(grep -rl 'WRITE_PASSCODE' dist/ 2>/dev/null | wc -l | tr -d ' ')" "0"
 check "dist/ にパスコード値が無い"     "$(grep -rl "${PASSCODE}" dist/ 2>/dev/null | wc -l | tr -d ' ')" "0"
-check "src/ server/ に VITE_ が無い"   "$(grep -rl 'VITE_' src/ server/ 2>/dev/null | wc -l | tr -d ' ')" "0"
+# 「VITE_ という文字列があるか」ではなく「ビルド時に環境変数を読み込む書き方があるか」を見る。
+# 前者だと "VITE_ 接頭辞を使わない" と書いたコメントに反応して false FAIL になる（実測）。
+# 秘密がバンドルに載る経路は import.meta.env 経由なので、そこを直接見る。
+check "import.meta.env を使っていない"  "$(banned_in_code 'import\.meta\.env' src/ server/)" "0"
 
 echo; echo "===== 静的チェック（Blocker） ====="
-# 禁止語がコメント中にあるだけの行を数えないよう、// 以降を落としてから数える。
-#
-# 「// を含む行を丸ごと除外」は行末コメント付きの実コード行まで消して false PASS になる。
-# 「// の後ろにその語がある行を除外」でも、行末コメントが同じ語を含むと見逃す
-# （実測: `const x = "last_insert_rowid()"; // last_insert_rowid を使う理由` が 0 になる）。
-# コメント部を落としてから数えれば、どちらの形でも検出できる（原則4）。
-banned_in_code() { # banned_in_code <正規表現> <対象...>
-  local pattern="$1"; shift
-  grep -rnE "$pattern" "$@" 2>/dev/null | sed 's|//.*||' | grep -cE "$pattern" | tr -d ' '
-}
 check "last_insert_rowid を使っていない" "$(banned_in_code 'last_insert_rowid' server/)" "0"
 check "DELETE エンドポイントが無い"      "$(banned_in_code '\.delete\(' server/)" "0"
 check "運営系テーブルへの書き込みが無い" "$(banned_in_code '(INSERT INTO|UPDATE|DELETE FROM) *(leagues|teams|members|league_members)' server/)" "0"
