@@ -16,9 +16,19 @@ cd "$(dirname "$0")/.."
 PORT="${PORT:-8791}"
 BASE="http://localhost:${PORT}"
 PASSCODE="verify-api-passcode"
-LOG="$(mktemp -t verify-api).log"
-# 開発者の .wrangler/state を消さないよう、専用の persist 先を使う
-PERSIST="$(mktemp -d -t verify-api-state)"
+# 開発者の .wrangler/state を消さないよう、専用の persist 先を使う。
+# `mktemp -t prefix` は BSD 拡張で、GNU（CI の ubuntu）はテンプレートに X を要求する
+# （`mktemp: too few X's` で失敗する）。逆に BSD で `-t name.XXXXXX` と書くと
+# XXXXXX が名前にそのまま残る。ディレクトリを明示したテンプレート形式なら両方で同じ。
+PERSIST="$(mktemp -d "${TMPDIR:-/tmp}/verify-api-state.XXXXXX")"
+# mktemp が失敗しても set -e ではないので進んでしまう。`--persist-to ""` や
+# `mkdir -p ""` の意味不明な失敗になる前に、ここで止める。
+[ -n "$PERSIST" ] && [ -d "$PERSIST" ] || { echo "一時ディレクトリを作れませんでした。"; exit 1; }
+# ログは PERSIST と同じ一意な名前を使う（X の後ろに接尾辞を置くテンプレートは
+# GNU では通らないため）。PERSIST の中には置かない。cleanup が消してしまい、
+# CI が失敗したときに読めなくなる。
+LOG="${PERSIST}.log"
+: > "$LOG" || { echo "一時ログファイルを作れませんでした: $LOG"; exit 1; }
 pass=0; fail=0
 
 W() { npx --no-install wrangler "$@"; }
@@ -42,26 +52,31 @@ jq_field() { # jq_field <JSONパス式> — 標準入力の JSON から値を取
 # pkill でパターンに一致するプロセスを消すと、同じマシンで動いている
 # 他セッションの検証サーバーまで巻き込む（実際に巻き込んだ）。
 #
-# 落とし方には2つの罠がある（両方とも実測で踏んだ）。
-#   1. `W` はシェル関数なので `W dev ... &` の $! は**サブシェル**の PID。
-#      それを kill してもサブシェルが死ぬだけで、孫の workerd はポートを掴んだまま残る。
-#      → ジョブ制御 (`set -m`) を有効にしてプロセスグループごと落とす。
-#   2. 落ちたことを確認せずに次を起動すると、新しい wrangler はポートを取れずに死に、
-#      **古いワーカーが応答し続ける**。/api/health が 200 を返すので起動成功に見えるが、
-#      実際には env が切り替わっていない（「未設定 → 500」の検証が成立しなくなる）。
-#      → ポートが空くまで待ち、空かなければ落ちる。
+# `W` はシェル関数なので `W dev ... &` の $! は**サブシェル**の PID。
+# それを kill してもサブシェルが死ぬだけで、孫の workerd はポートを掴んだまま残る。
+# ジョブ制御 (`set -m`) を有効にして、プロセスグループごと落とす。
 set -m
 WRANGLER_PID=""
 # lsof が無いと port_is_free が常に true になり、上の 2 を静かに見逃す。
 # 「検査が動いていないのに動いているように見える」のが一番まずいので先に落とす。
 command -v lsof >/dev/null 2>&1 || { echo "lsof がありません。ポートの解放を確認できないため中断します。"; exit 1; }
 port_is_free() { ! lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN >/dev/null 2>&1; }
-stop_worker() {
+
+# 落とすだけ。待たない。EXIT trap からも呼ぶので、ここで待つと
+# 「中断 → trap → もう一度 30 秒」と二重に待つことになる。
+kill_worker() {
   if [ -n "$WRANGLER_PID" ]; then
     kill -TERM -- -"$WRANGLER_PID" >/dev/null 2>&1 || kill -TERM "$WRANGLER_PID" >/dev/null 2>&1 || true
     wait "$WRANGLER_PID" 2>/dev/null || true
     WRANGLER_PID=""
   fi
+}
+
+# ポートが本当に空いたことを確認する。空かなければ中断する。
+# 確認せずに次を起動すると、新しい wrangler はポートを取れずに死に、
+# **古いワーカーが応答し続ける**。/api/health は 200 を返すので起動成功に見えるが、
+# 実際には env が切り替わっていない（「未設定 → 500」の検証が成立しなくなる）。
+wait_port_free() {
   for _ in $(seq 1 30); do
     port_is_free && return 0
     sleep 1
@@ -70,8 +85,13 @@ stop_worker() {
   lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN 2>/dev/null | tail -n +2
   exit 1
 }
+
+stop_worker() {
+  kill_worker
+  wait_port_free
+}
 cleanup() {
-  stop_worker
+  kill_worker
   rm -f .dev.vars.verify .dev.vars.empty
   rm -rf "$PERSIST"
 }
