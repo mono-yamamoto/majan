@@ -240,6 +240,13 @@ check "GET の各半荘が4人ぶんの結果を持つ" \
 check "GET の members 件数" "$(curl -s "${BASE}/api/leagues/1" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)["members"]))')" "10"
 t 404 '存在しないリーグ' "${BASE}/api/leagues/999"
 
+echo; echo "===== GET /api/leagues（トップのリーグ選択用） ====="
+t 200 'GET /api/leagues はパスコード不要' "${BASE}/api/leagues"
+shape "leagues は { leagues: [...] } で返る" "True" 'isinstance(d.get("leagues"), list)' "${BASE}/api/leagues"
+shape "seed の1リーグが返る"                "1" 'len(d["leagues"])' "${BASE}/api/leagues"
+shape "id と name だけを返す（設定値は含めない）" "id,name" '",".join(sorted(d["leagues"][0].keys()))' "${BASE}/api/leagues"
+shape "name が取れている"                   "2026 秋リーグ" 'd["leagues"][0]["name"]' "${BASE}/api/leagues"
+
 echo; echo "===== WRITE_PASSCODE 未設定でも素通りしない ====="
 games_before_unset=$(Q "SELECT COUNT(*) AS n FROM games;")
 start_worker without-secret

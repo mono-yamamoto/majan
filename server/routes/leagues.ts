@@ -13,6 +13,20 @@ export function parseId(raw: string): number | null {
 export const leagues = new Hono<{ Bindings: Bindings }>();
 
 /**
+ * リーグの一覧。トップのリーグ選択で使う。
+ *
+ * 返すのは id と name だけ。設定値やメンバーは選択後に /api/leagues/:id で取る。
+ * 論理削除の概念が無いテーブルなので全件返す。
+ */
+leagues.get("/api/leagues", async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT id, name FROM leagues ORDER BY id").all<{
+    id: number;
+    name: string;
+  }>();
+  return c.json({ leagues: results });
+});
+
+/**
  * リーグ設定・チーム・メンバー・全半荘の素点を1回で返す（決定#14）。
  * pt・順位・集計はすべてフロントで計算するので、ここでは素点しか返さない。
  * 論理削除済みの半荘は除外する。
