@@ -43,12 +43,20 @@ const RAW_PER_DECI = 100;
  *   1. 素点合計 = `startPoint * 4`
  *   2. ウマの合計 = 0
  *   3. `rawScore` / `startPoint` / `returnPoint` がすべて 100 の倍数
- * いずれも DB の CHECK 制約と `validation.ts` 側の責務で、この関数は検証しない
- * （`scoreGame` は「与えられた4人を採点する」だけ）。
+ * これらは業務ルールの検証なのでこの関数では見ない
+ * （1 は `validation.ts`、2・3 は `leagues` / `game_results` の CHECK 制約が担保する）。
  *
- * `rule.uma` は4人ぶんの並びなので、`results` はちょうど4件を渡すこと。
+ * ただし「`results` がちょうど4件」は業務ルールではなく**この関数の事前条件**なので、
+ * ここで検証して `RangeError` を投げる。件数がずれると `rule.uma` との対応が崩れ、
+ * 例外を投げずにもっともらしい誤答（3件なら 2人が 0pt、5件なら合計 −3.0）を返してしまうため。
+ *
+ * @throws {RangeError} `results.length !== rule.uma.length` のとき
  */
 export function scoreGame(results: Result[], rule: LeagueRule): Scored[] {
+  if (results.length !== rule.uma.length) {
+    throw new RangeError(`scoreGame: expected ${rule.uma.length} results, got ${results.length}`);
+  }
+
   // 返し点−持ち点が25の倍数でない設定でも deci-pt の整数前提を壊さないよう丸める
   const okaDeci = Math.round(((rule.returnPoint - rule.startPoint) * 4) / RAW_PER_DECI);
 
@@ -56,19 +64,24 @@ export function scoreGame(results: Result[], rule: LeagueRule): Scored[] {
   const sorted = [...results].sort((a, b) => b.rawScore - a.rawScore || a.memberId - b.memberId);
 
   const scored: Scored[] = [];
+  let head = 0;
 
-  for (let head = 0; head < sorted.length;) {
+  while (head < sorted.length) {
     // 同点グループは [head, tail)
     let tail = head;
     while (tail < sorted.length && sorted[tail].rawScore === sorted[head].rawScore) tail++;
     const size = tail - head;
 
-    // グループが占める順位ぶんのウマを合算する。先頭グループにはオカも乗る
-    const umaDeci = rule.uma.slice(head, tail).reduce((sum, u) => sum + u * DECI_PER_PT, 0);
+    // グループが占める順位ぶんのウマを合算する。先頭グループにはオカも乗る。
+    // ウマ側も okaDeci と同様に丸める（型は number なので非整数を渡せてしまうため）
+    const umaDeci = rule.uma
+      .slice(head, tail)
+      .reduce((sum, u) => sum + Math.round(u * DECI_PER_PT), 0);
     const bonusDeci = umaDeci + (head === 0 ? okaDeci : 0);
 
     // 整数除算で山分けし、余りはグループ先頭から 1 ずつ配る。
-    // Math.trunc はゼロ方向に丸めるので、余りの符号は bonusDeci の符号と一致する。
+    // Math.trunc はゼロ方向に丸めるので、余りの符号は bonusDeci の符号と一致する
+    // （bonusDeci < 0 のときは先頭が -0.1 を被る側になる。「先頭が必ず得をする」ではない）。
     const shareDeci = Math.trunc(bonusDeci / size);
     let remainderDeci = bonusDeci - shareDeci * size;
 

@@ -29,6 +29,13 @@ const BROKEN_UMA_RULE: LeagueRule = {
   uma: [30, 10, -10, -20],
 };
 
+/** Σuma = 0 だが個々のウマが 0.1pt 刻みでない設定（ゼロサムの前提を突く） */
+const FRACTIONAL_UMA_RULE: LeagueRule = {
+  startPoint: 25000,
+  returnPoint: 30000,
+  uma: [30.25, 10, -10, -30.25],
+};
+
 /** 素点を memberId 1..n に割り当てて Result[] にする */
 const hand = (...rawScores: number[]): Result[] =>
   rawScores.map((rawScore, i) => ({ memberId: i + 1, rawScore }));
@@ -44,6 +51,23 @@ const totalDeci = (scored: Scored[]): number => scored.reduce((sum, s) => sum + 
 /** 期待値と突き合わせやすい形（pt は deci-pt 整数）に落とす */
 const shape = (scored: Scored[]) =>
   scored.map((s) => ({ memberId: s.memberId, rank: s.rank, ptDeci: deciOf(s.pt) }));
+
+describe("scoreGame / 事前条件", () => {
+  // 業務ルール（素点合計・2-2固定）の検証は validation.ts の責務だが、
+  // 「results がちょうど4件」は rule.uma との対応が崩れるプログラマエラーなので
+  // scoreGame 自身が弾く。放置すると例外を投げずに誤答を返してしまう。
+  it.each([
+    ["0件", [] as number[]],
+    ["3件", [40000, 30000, 30000]],
+    ["5件", [40000, 30000, 20000, 5000, 5000]],
+  ])("results が %s なら RangeError を投げる", (_label, rawScores) => {
+    expect(() => scoreGame(hand(...rawScores), DEFAULT_RULE)).toThrow(RangeError);
+  });
+
+  it("4件なら投げない", () => {
+    expect(() => scoreGame(hand(40000, 30000, 20000, 10000), DEFAULT_RULE)).not.toThrow();
+  });
+});
 
 describe("scoreGame / 仕様書の計算例", () => {
   it("例1: 同点なし", () => {
@@ -183,13 +207,87 @@ function* zeroSumHands(
 
 const SWEEP = { step: 1000, min: -20000, max: 80000 } as const;
 
-describe("scoreGame / ゼロサムの網羅検証", () => {
+/**
+ * 1半荘の結果が満たすべき不変条件をすべて検査し、破れていれば理由を返す（なければ null）。
+ *
+ * pt 合計 0 だけでは弱すぎる（ウマの逆順割り当て・グループ内の配分ミス・rank の誤りは
+ * 合計が 0 のまま素通りし、極端には「全員 pt = 0」を返す実装でも通ってしまう）ので、
+ * グループ単位のオラクルまで降りて検査する。
+ */
+function findInvariantViolation(scored: Scored[], rule: LeagueRule): string | null {
+  const okaDeci = Math.round(((rule.returnPoint - rule.startPoint) * 4) / 100);
+  const ptDeci = scored.map((s) => deciOf(s.pt));
+
+  const total = ptDeci.reduce((sum, d) => sum + d, 0);
+  if (total !== 0) return `pt 合計が ${total} deci（0 でない）`;
+
+  for (let i = 1; i < scored.length; i++) {
+    if (scored[i - 1].rawScore < scored[i].rawScore) return "素点降順に並んでいない";
+  }
+
+  let head = 0;
+  while (head < scored.length) {
+    let tail = head;
+    while (tail < scored.length && scored[tail].rawScore === scored[head].rawScore) tail++;
+
+    // rank は同点グループ内で同じ値、かつグループ先頭のインデックス + 1
+    for (let k = head; k < tail; k++) {
+      if (scored[k].rank !== head + 1) {
+        return `rank が ${scored[k].rank}（期待 ${head + 1}）`;
+      }
+    }
+
+    // グループが受け取るべきウマ・オカを rule から独立に組み立てる。
+    // size === 1（同点なし）のときは「その人の pt = 素点由来 + uma[rank-1] (+ オカ)」という
+    // 直接オラクルになり、ウマを逆順に割り当てる実装ミスを検出できる。
+    let expectedGroupDeci = head === 0 ? okaDeci : 0;
+    for (let k = head; k < tail; k++) {
+      expectedGroupDeci += Math.round((scored[k].rawScore - rule.returnPoint) / 100);
+      expectedGroupDeci += Math.round(rule.uma[k] * 10);
+    }
+
+    let actualGroupDeci = 0;
+    let min = Infinity;
+    let max = -Infinity;
+    for (let k = head; k < tail; k++) {
+      actualGroupDeci += ptDeci[k];
+      min = Math.min(min, ptDeci[k]);
+      max = Math.max(max, ptDeci[k]);
+    }
+    if (actualGroupDeci !== expectedGroupDeci) {
+      return `グループ[${head},${tail}) の合計が ${actualGroupDeci} deci（期待 ${expectedGroupDeci}）`;
+    }
+
+    // 同点グループは素点が同じなので、差が付くのは余りの ±1 deci ぶんだけ
+    if (max - min > 1) return `グループ[${head},${tail}) の配分差が ${max - min} deci`;
+
+    // 余りは bonusDeci の符号の向きに先頭から配られる。
+    // bonusDeci >= 0 なら先頭が +1 を受け取る（非増加）、< 0 なら先頭が -1 を被る（非減少）。
+    // 「先頭が必ず得をする」ではない点に注意（ウマ5-10 で下位3人同点だと bonusDeci < 0）。
+    let bonusDeci = head === 0 ? okaDeci : 0;
+    for (let k = head; k < tail; k++) bonusDeci += Math.round(rule.uma[k] * 10);
+    for (let k = head + 1; k < tail; k++) {
+      if (bonusDeci >= 0 && ptDeci[k] > ptDeci[k - 1]) {
+        return `bonusDeci=${bonusDeci} >= 0 なのにグループ内が増加している`;
+      }
+      if (bonusDeci < 0 && ptDeci[k] < ptDeci[k - 1]) {
+        return `bonusDeci=${bonusDeci} < 0 なのにグループ内が減少している`;
+      }
+    }
+
+    head = tail;
+  }
+
+  return null;
+}
+
+describe("scoreGame / 網羅検証", () => {
   /**
-   * pt合計(deci) = (Σraw − 4·returnPoint)/100 + Σuma·10 + round((returnPoint−startPoint)·4/100)
-   * Σraw = 4·startPoint を代入すると Σuma·10 が残る。
+   * pt合計(deci) = (Σraw − 4·returnPoint)/100 + Σround(uma·10) + round((returnPoint−startPoint)·4/100)
+   * Σraw = 4·startPoint を代入すると Σround(uma·10) が残る。
    * つまりゼロサムの成立条件は次の3つ:
    *   1. Σraw = startPoint x 4
-   *   2. Σuma = 0
+   *   2. Σround(uma x 10) = 0（ウマが整数なら Σuma = 0 と同値）
    *   3. rawScore / startPoint / returnPoint がすべて 100 の倍数
    */
   const zeroSumRules: [string, LeagueRule][] = [
@@ -199,23 +297,26 @@ describe("scoreGame / ゼロサムの網羅検証", () => {
   ];
 
   for (const [name, rule] of zeroSumRules) {
-    it(`Σuma = 0 の設定なら全ケースで pt 合計が厳密に 0: ${name}`, () => {
-      expect(rule.uma.reduce((sum, u) => sum + u, 0)).toBe(0);
+    it(`全ケースで不変条件を満たす: ${name}`, () => {
+      expect(rule.uma.reduce((sum, u) => sum + Math.round(u * 10), 0)).toBe(0);
 
       let checked = 0;
-      const violations: { rawScores: number[]; totalDeci: number }[] = [];
+      let groups = 0;
+      const violations: { rawScores: number[]; reason: string }[] = [];
 
       for (const rawScores of zeroSumHands(rule.startPoint, SWEEP.step, SWEEP.min, SWEEP.max)) {
         checked++;
-        const total = totalDeci(scoreGame(hand(...rawScores), rule));
-        if (total !== 0 && violations.length < 5) {
-          violations.push({ rawScores, totalDeci: total });
-        }
+        const scored = scoreGame(hand(...rawScores), rule);
+        groups += new Set(rawScores).size;
+        const reason = findInvariantViolation(scored, rule);
+        if (reason !== null && violations.length < 5) violations.push({ rawScores, reason });
       }
 
       expect(violations).toEqual([]);
       expect(checked).toBe(650_491);
-    }, 30_000);
+      // 同点グループが十分な数含まれていること（同点なしなら 4 グループ）
+      expect(groups).toBeLessThan(checked * 4);
+    }, 60_000);
   }
 
   it("網羅ケースが同点・3人同点・箱下をちゃんと含んでいる", () => {
@@ -250,7 +351,7 @@ describe("scoreGame / ゼロサムが成立しない条件", () => {
   /**
    * ★これは「壊れているのが正しい」テスト★
    *
-   * ウマ合計が 0 でない設定では pt 合計は 0 にならず、必ず Σuma x 10 (deci) だけずれる。
+   * ウマ合計が 0 でない設定では pt 合計は 0 にならず、必ず Σround(uma x 10) だけずれる。
    * これは scoreGame のバグではなく、リーグ設定が不正なだけ。
    * 将来これを見て「合計が0にならないバグだ」と scoreGame 側を直しにいくのを防ぐためのガード。
    * 正しい対処は leagues テーブルの CHECK 制約 (uma_1st + ... + uma_4th = 0) で
@@ -282,4 +383,32 @@ describe("scoreGame / ゼロサムが成立しない条件", () => {
     expect(checked).toBe(650_491);
     expect(violations).toBe(checked); // 例外なく全滅する
   }, 30_000);
+
+  /**
+   * ★ここも「壊れているのが正しい」テスト★
+   *
+   * 条件2の正確な形は「Σuma = 0」ではなく「Σround(uma x 10) = 0」。
+   * uma = [30.25, 10, -10, -30.25] は Σuma = 0 だが、Math.round が
+   * 302.5 → 303 / -302.5 → -302 と +∞ 方向に丸めるため Σround(uma x 10) = +1 になる。
+   *
+   * ウマを deci 化する際に Math.round を噛ませたことで、ズレは
+   * 「同点の並びによって -0.1 / 0 と変動する」状態から
+   * 「全ケース一律 +0.1（= Σround(uma x 10)）」という代数どおりの形になった。
+   * ゼロサムが直るわけではない。実運用では leagues.uma_* が INTEGER なので発生しない。
+   */
+  it("Σuma = 0 でもウマが 0.1pt 刻みでなければゼロサムは成立しない（ずれ幅は一定）", () => {
+    expect(FRACTIONAL_UMA_RULE.uma.reduce((sum, u) => sum + u, 0)).toBe(0);
+    const umaDeciSum = FRACTIONAL_UMA_RULE.uma.reduce((sum, u) => sum + Math.round(u * 10), 0);
+    expect(umaDeciSum).toBe(1);
+
+    for (const rawScores of [
+      [30000, 30000, 30000, 10000], // 3人トップ同点
+      [35000, 35000, 20000, 10000], // トップ同点
+      [42300, 28100, 18400, 11200], // 同点なし
+    ]) {
+      const total = totalDeci(scoreGame(hand(...rawScores), FRACTIONAL_UMA_RULE));
+      // 同点の構造によらず、ずれ幅は常に Σround(uma x 10)
+      expect(total).toBe(umaDeciSum);
+    }
+  });
 });
