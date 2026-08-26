@@ -125,6 +125,27 @@ sequenceDiagram
 半荘終了時に残った供託リーチ棒はトップが取る前提。合計が持ち点×4（デフォルト 100,000）にならない時はここを確認。
 </Aside>
 
+<Aside type="note" title="seed をやり直すときは全テーブルを消してから">
+`db/seed.local.sql` は**二重投入で落ちる**（`UNIQUE constraint failed`）。これは「運営が誤って2回流しても壊れない」ための設計（→ [データモデル](/spec/data-model/)）。
+
+そのため、**一部のテーブルだけ消して流し直すことはできない**。`leagues` だけ消して再投入しようとすると `members.id` の重複で落ちる。
+
+やり直すなら全部消す。
+
+```bash
+wrangler d1 execute majan --local --command \
+  "DELETE FROM game_results; DELETE FROM games; DELETE FROM league_members; DELETE FROM teams; DELETE FROM members; DELETE FROM leagues;"
+```
+
+ローカルなら DB ごと作り直す方が確実。
+
+```bash
+rm -rf .wrangler/state/v3/d1
+wrangler d1 migrations apply majan --local
+wrangler d1 execute majan --local --file=./db/seed.local.sql
+```
+</Aside>
+
 ## 間違えたとき
 
 - 半荘一覧から該当行を開いて **編集** で素点を直す（パスコード必要）

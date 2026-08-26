@@ -5,6 +5,7 @@
 dist/
 
 # tooling caches
+.playwright-mcp/
 .wrangler/
 .astro/
 .vite/
