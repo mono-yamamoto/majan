@@ -177,6 +177,26 @@ wrangler secret put WRITE_PASSCODE   # プロンプトで新しい値を入力�
 
 入力係の端末では次の書き込み時に 401 が返るので、新しいパスコードを入れ直してもらう。
 
+<Aside type="danger" title="半荘に出たことのあるメンバーを league_members から消さない">
+誰かがリーグを抜けても、**`league_members` の行は消さない**。出場しなくなるだけにする。
+
+消すと2つ壊れる。
+
+| 何が | どうなる |
+|---|---|
+| その人を含む過去の半荘 | **編集できなくなる**（所属チェックで落ちる。決定#9 の修正機能が使えない） |
+| チーム合計pt | **両チームの和が 0 にならなくなる**（その人のptがどちらにも入らないため） |
+
+DBはこれを止められない（`game_results` に `league_id` が無いので外部キーを張れない）。**運用で守るしかない。**
+
+すでに消してしまった場合は、行を戻せば直る。
+
+```bash
+wrangler d1 execute majan --remote --command \
+  "INSERT INTO league_members (league_id, member_id, team_id) VALUES (1, 5, 1);"
+```
+</Aside>
+
 ## 翌シーズン
 
 - `leagues` に新しい行を作り、`teams` / `league_members` を組み直す
