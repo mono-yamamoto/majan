@@ -34,7 +34,9 @@ export type ValidationErrorCode =
   | "RAW_SCORE_TOTAL"
   /** 素点が100の倍数でない */
   | "RAW_SCORE_UNIT"
-  /** 素点が安全整数でない（2^53 を超えると % 100 の判定が嘘になる） */
+  /** 素点が数値として読めない（NaN / ±Infinity） */
+  | "RAW_SCORE_NOT_A_NUMBER"
+  /** 素点が安全整数の範囲を超えている（2^53 を超えると % 100 の判定が嘘になる） */
   | "RAW_SCORE_RANGE"
   /** played_on が YYYY-MM-DD の実在日付でない */
   | "INVALID_DATE"
@@ -197,18 +199,24 @@ export function validateGameInput(
   }
 
   // 素点が「整数として正確に表せる範囲」を外れていると、合計も
-  // 「100の倍数か」も判定が嘘になる。どちらの検査も先に範囲を確かめてから行う（→ 8.）。
+  // 「100の倍数か」も判定が嘘になる。どちらの検査も先に確かめてから行う（→ 8. 9.）。
   //
-  // 小数（42300.5）はここに含めない。安全整数ではないが、原因は桁の大きさではなく
-  // 入力単位なので「素点の値が大きすぎます」は誤解を招く。% 100 が 0 にならないので
-  // 7. の RAW_SCORE_UNIT が拾う（x % 100 === 0 を満たす有限の非整数は存在しない）。
+  // NaN / ±Infinity と「桁が大きすぎる値」は分ける。どちらも安全整数ではないが、
+  // NaN に「値が大きすぎます」と言うのは事実と違う。NaN は TypeScript の number として
+  // 合法なので、型どおりの呼び出しで到達しうる（＝契約内の入力）。
+  //
+  // 小数（42300.5）はどちらにも含めない。原因は桁でも読めなさでもなく入力単位なので、
+  // % 100 が 0 にならないことを使って 7. の RAW_SCORE_UNIT が拾う
+  // （x % 100 === 0 を満たす有限の非整数は存在しない）。
+  const notANumber = results.filter((r) => !Number.isFinite(r.rawScore));
   const outOfRange = results.filter(
     (r) =>
-      !Number.isFinite(r.rawScore) ||
-      (Number.isInteger(r.rawScore) && !Number.isSafeInteger(r.rawScore)),
+      Number.isFinite(r.rawScore) &&
+      Number.isInteger(r.rawScore) &&
+      !Number.isSafeInteger(r.rawScore),
   );
-  const hasOutOfRange = outOfRange.length > 0;
-  const outOfRangeSet = new Set(outOfRange);
+  const hasOutOfRange = notANumber.length > 0 || outOfRange.length > 0;
+  const unusable = new Set([...notANumber, ...outOfRange]);
 
   // 6. 素点合計（4人ぶんそろっていないと意味がない）
   if (hasExactCount && !hasOutOfRange) {
@@ -228,7 +236,7 @@ export function validateGameInput(
   // 桁が範囲外の素点は 8. で報告するので、ここでは見ない。
   // 1e19 は % 100 === 0 が成立してしまうため「100点単位です」と言うと誤解を招く
   const badUnit = results
-    .filter((r) => !outOfRangeSet.has(r) && r.rawScore % 100 !== 0)
+    .filter((r) => !unusable.has(r) && r.rawScore % 100 !== 0)
     .map((r) => r.memberId);
   if (badUnit.length > 0) {
     errors.push({
@@ -239,8 +247,18 @@ export function validateGameInput(
     });
   }
 
-  // 8. 素点の範囲
-  if (hasOutOfRange) {
+  // 8. 素点が数値として読めない
+  if (notANumber.length > 0) {
+    errors.push({
+      code: "RAW_SCORE_NOT_A_NUMBER",
+      field: "results",
+      memberIds: [...new Set(notANumber.map((r) => r.memberId))],
+      message: "素点を数字で入力してください",
+    });
+  }
+
+  // 9. 素点の範囲
+  if (outOfRange.length > 0) {
     errors.push({
       code: "RAW_SCORE_RANGE",
       field: "results",
@@ -249,7 +267,7 @@ export function validateGameInput(
     });
   }
 
-  // 9. 日付
+  // 10. 日付
   if (!isValidPlayedOn(input.playedOn)) {
     errors.push({
       code: "INVALID_DATE",
@@ -259,7 +277,7 @@ export function validateGameInput(
     });
   }
 
-  // 10. memo の長さ
+  // 11. memo の長さ
   if (input.memo !== null && input.memo.length > MEMO_MAX_LENGTH) {
     errors.push({
       code: "MEMO_TOO_LONG",

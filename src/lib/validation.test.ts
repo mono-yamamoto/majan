@@ -404,6 +404,99 @@ describe("validateGameInput / 3. メンバーIDの範囲・8. 素点の範囲", 
     expect(validateGameInput(input, RULE, ROSTER)).toEqual([]);
   });
 
+  /**
+   * ★NaN は TypeScript の number として合法なので、型どおりの呼び出しで到達しうる★
+   * 「呼び出し側が先に弾いているから」は validation.ts の契約を
+   * 呼び出し側の実装に依存させることになる。契約内の入力に対して
+   * 事実と違うメッセージ（「値が大きすぎます」）を返すのは defect。
+   */
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["-Infinity", Number.NEGATIVE_INFINITY],
+  ])("素点が %s なら RAW_SCORE_NOT_A_NUMBER（「大きすぎます」とは言わない）", (_l, rawScore) => {
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: 1, rawScore: rawScore as number },
+        { memberId: 6, rawScore: 25000 },
+        { memberId: 2, rawScore: 25000 },
+        { memberId: 7, rawScore: 25000 },
+      ],
+    };
+    const errors = validateGameInput(input, RULE, ROSTER);
+    const codes = codesOf(errors);
+    expect(codes).toContain("RAW_SCORE_NOT_A_NUMBER");
+    expect(codes).not.toContain("RAW_SCORE_RANGE");
+    expect(find(errors, "RAW_SCORE_NOT_A_NUMBER")?.message).toBe("素点を数字で入力してください");
+    expect(find(errors, "RAW_SCORE_NOT_A_NUMBER")?.memberIds).toEqual([1]);
+  });
+
+  it("NaN があるときも RAW_SCORE_UNIT と RAW_SCORE_TOTAL は出さない（判定が嘘になるため）", () => {
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: 1, rawScore: Number.NaN },
+        { memberId: 6, rawScore: 25000 },
+        { memberId: 2, rawScore: 25000 },
+        { memberId: 7, rawScore: 25000 },
+      ],
+    };
+    expect(codesOf(validateGameInput(input, RULE, ROSTER))).toEqual(["RAW_SCORE_NOT_A_NUMBER"]);
+  });
+
+  it("1e19 は RAW_SCORE_RANGE のまま（桁の問題と読めなさを混ぜない）", () => {
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: 1, rawScore: 1e19 },
+        { memberId: 6, rawScore: -1e19 },
+        { memberId: 2, rawScore: 50000 },
+        { memberId: 7, rawScore: 50000 },
+      ],
+    };
+    const codes = codesOf(validateGameInput(input, RULE, ROSTER));
+    expect(codes).toEqual(["RAW_SCORE_RANGE"]);
+    expect(codes).not.toContain("RAW_SCORE_NOT_A_NUMBER");
+  });
+
+  it("NaN と 1e19 が混ざれば両方報告する", () => {
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: 1, rawScore: Number.NaN },
+        { memberId: 6, rawScore: 1e19 },
+        { memberId: 2, rawScore: 25000 },
+        { memberId: 7, rawScore: 25000 },
+      ],
+    };
+    expect(codesOf(validateGameInput(input, RULE, ROSTER))).toEqual([
+      "RAW_SCORE_NOT_A_NUMBER",
+      "RAW_SCORE_RANGE",
+    ]);
+  });
+
+  it("memberId が NaN でも MEMBER_ID_RANGE の文言は事実に合っている", () => {
+    const input: GameInput = {
+      playedOn: "2026-08-26",
+      memo: null,
+      results: [
+        { memberId: Number.NaN, rawScore: 25000 },
+        { memberId: 6, rawScore: 25000 },
+        { memberId: 2, rawScore: 25000 },
+        { memberId: 7, rawScore: 25000 },
+      ],
+    };
+    const errors = validateGameInput(input, RULE, ROSTER);
+    expect(codesOf(errors)).toContain("MEMBER_ID_RANGE");
+    // 「メンバーの指定が不正です」は 0 / 負 / 非整数 / 巨大値 / NaN のいずれにも当てはまる
+    expect(find(errors, "MEMBER_ID_RANGE")?.message).toBe("メンバーの指定が不正です");
+  });
+
   it("非整数の素点は RAW_SCORE_RANGE ではなく RAW_SCORE_UNIT で弾く", () => {
     const input = validInput();
     input.results[0].rawScore = 42300.5;
