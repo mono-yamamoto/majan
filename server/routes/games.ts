@@ -132,9 +132,11 @@ async function runBatch(
 
 export const games = new Hono<{ Bindings: Bindings }>();
 
-// 書き込みは3本とも X-Passcode 必須（GET には掛けない）
-games.use("/api/games", requirePasscode);
-games.use("/api/games/*", requirePasscode);
+// 書き込みは3本とも X-Passcode 必須。メソッドを限定するのは、use() だと
+// GET /api/games/1 が（ルート不在の 404 ではなく）401 を返してしまい、
+// 「GET 系はパスコード不要」（決定#16）と字面がずれるため。
+games.on(["POST", "PATCH"], "/api/games", requirePasscode);
+games.on(["POST", "PATCH"], "/api/games/*", requirePasscode);
 
 // ---------------------------------------------------------------------------
 // POST /api/games — 新規登録
