@@ -5,6 +5,8 @@
  * 行の型はカラム名そのまま（snake_case）、アプリ内で扱う型は camelCase に分ける。
  */
 
+import type { LeagueRule } from "./scoring";
+
 // ---------------------------------------------------------------------------
 // テーブル行
 // ---------------------------------------------------------------------------
@@ -85,11 +87,7 @@ export type GameInput = {
  * （逆順に入れても Σuma = 0 のままなのでゼロサム検査も素通りする）。
  * 変換を1か所に閉じ込めて、フロントと API で同じものを使う。
  */
-export function toLeagueRule(row: LeagueRow): {
-  startPoint: number;
-  returnPoint: number;
-  uma: [number, number, number, number];
-} {
+export function toLeagueRule(row: LeagueRow): LeagueRule {
   return {
     startPoint: row.start_point,
     returnPoint: row.return_point,

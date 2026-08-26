@@ -3,6 +3,7 @@ import type { LeagueRule } from "./scoring";
 import type { GameInput } from "./types";
 import {
   isValidPlayedOn,
+  MEMO_MAX_LENGTH,
   validateGameInput,
   type Roster,
   type ValidationErrorCode,
@@ -341,6 +342,36 @@ describe("validateGameInput / 8. 日付", () => {
   });
 });
 
+describe("validateGameInput / 9. memo の長さ", () => {
+  const withMemo = (memo: string | null): GameInput => ({ ...validInput(), memo });
+
+  it("memo が null なら通る", () => {
+    expect(validateGameInput(withMemo(null), RULE, ROSTER)).toEqual([]);
+  });
+
+  it("memo が空文字なら通る", () => {
+    expect(validateGameInput(withMemo(""), RULE, ROSTER)).toEqual([]);
+  });
+
+  it(`ちょうど ${MEMO_MAX_LENGTH} 文字なら通る（境界）`, () => {
+    expect(validateGameInput(withMemo("あ".repeat(MEMO_MAX_LENGTH)), RULE, ROSTER)).toEqual([]);
+  });
+
+  it(`${MEMO_MAX_LENGTH + 1} 文字なら MEMO_TOO_LONG（境界）`, () => {
+    const errors = validateGameInput(withMemo("あ".repeat(MEMO_MAX_LENGTH + 1)), RULE, ROSTER);
+    const err = find(errors, "MEMO_TOO_LONG");
+    expect(err?.field).toBe("memo");
+    expect(err?.memberIds).toEqual([]);
+    expect(err?.message).toContain(String(MEMO_MAX_LENGTH + 1));
+  });
+
+  it("極端に長い memo も弾く", () => {
+    expect(codesOf(validateGameInput(withMemo("x".repeat(100_000)), RULE, ROSTER))).toEqual([
+      "MEMO_TOO_LONG",
+    ]);
+  });
+});
+
 describe("validateGameInput / エラーは全部返す", () => {
   it("複数の問題があれば最初の1件で打ち切らずすべて返す", () => {
     const input: GameInput = {
@@ -365,7 +396,7 @@ describe("validateGameInput / エラーは全部返す", () => {
   it("返る順序は features.mdx のバリデーション表の順で安定している", () => {
     const input: GameInput = {
       playedOn: "banana",
-      memo: null,
+      memo: "め".repeat(MEMO_MAX_LENGTH + 1),
       results: [
         { memberId: 1, rawScore: 30050 },
         { memberId: 1, rawScore: 30000 }, // 重複
@@ -377,6 +408,7 @@ describe("validateGameInput / エラーは全部返す", () => {
       "DUPLICATE_MEMBER",
       "NOT_IN_LEAGUE",
       "RAW_SCORE_UNIT",
+      "MEMO_TOO_LONG",
       "INVALID_DATE",
     ]);
   });
