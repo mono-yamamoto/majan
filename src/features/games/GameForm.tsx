@@ -13,7 +13,7 @@ import { useLeague } from "@/lib/league-context";
 import { scoreGame } from "@/lib/scoring";
 import type { GameInput } from "@/lib/types";
 import { validateGameInput, type ValidationError } from "@/lib/validation";
-import { toGameInput, type GameFormRow, type GameFormValue } from "./game-form-value";
+import { toGameInput, updateRow, type GameFormRow, type GameFormValue } from "./game-form-value";
 
 export function GameForm({
   value,
@@ -99,7 +99,7 @@ export function GameForm({
   };
 
   const setRow = (index: number, patch: Partial<GameFormRow>) => {
-    const rows = value.rows.map((row, i) => (i === index ? { ...row, ...patch } : row));
+    const rows = value.rows.map((row, i) => (i === index ? updateRow(row, patch) : row));
     onChange({ ...value, rows });
   };
 
@@ -156,7 +156,10 @@ export function GameForm({
                     ))}
                 </optgroup>
               ))}
-              {/* どのチームにも属さないメンバー（名簿から外れた等）は最後に */}
+              {/* 現状の GET は league_members を JOIN するので members に名簿外は来ず、
+                  この分岐は空にしかならない。残しているのは、集計側が名簿外のメンバーを
+                  unassigned として扱う設計になっており（D-23）、GET が名簿外を返す
+                  変更はありうるため。そのとき「なぜ空なのか」を調べ直さずに済む */}
               {members.filter((m) => roster.get(m.id) === undefined).length > 0 ? (
                 <optgroup label="所属不明">
                   {members

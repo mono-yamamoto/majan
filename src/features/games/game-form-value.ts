@@ -65,3 +65,23 @@ export function toGameInput(value: GameFormValue): GameInput {
     })),
   };
 }
+
+/**
+ * 行を更新する。**メンバーを変えたとき／素点を空にしたときは符号をリセットする。**
+ *
+ * 符号を入力欄と別に持っているので、リセットしないと前の行の「−」が残る。
+ * 別のメンバーに打ち直して正の数を入れたのに負数として扱われ、
+ * 他の行で合計が合ってしまうと**符号違いのまま保存できてしまう**。
+ * プレビューには出るが、メンバーを変えた直後に符号が残っているとは思わない。
+ *
+ * ± ボタン自体（patch.negative が明示されている場合）は当然そのまま通す。
+ */
+export function updateRow(row: GameFormRow, patch: Partial<GameFormRow>): GameFormRow {
+  const next = { ...row, ...patch };
+  if (patch.negative !== undefined) return next;
+
+  const memberChanged = patch.memberId !== undefined && patch.memberId !== row.memberId;
+  const cleared = next.rawScore.trim() === "";
+  if (memberChanged || cleared) next.negative = false;
+  return next;
+}
