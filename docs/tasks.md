@@ -17,8 +17,8 @@
 | T0 | プロジェクト基盤（git init / Vite+ / React+TS / Tailwind / wrangler.jsonc / 骨格） | – | **DONE** |
 | T2 | `src/lib/scoring.ts` 純粋関数 + Vitest（**最重要・正確さ勝負**）※T1より前倒し | T0 | **DONE** |
 | T1 | D1スキーマ: `migrations/0001_init.sql` + `db/seed.sql` + ローカル適用確認 | T0 | **DONE** |
-| T3 | `src/lib/types.ts` + `src/lib/validation.ts`（件数/重複/所属/2-2/合計/100倍数/日付/memo） | T1,T2 | **追補中** |
-| T4 | Hono API `server/`（GET league / POST・PATCH games / auth / batch） | T1,T3 | TODO |
+| T3 | `src/lib/types.ts` + `src/lib/validation.ts`（件数/重複/所属/2-2/合計/100倍数/日付/memo） | T1,T2 | **DONE** |
+| T4 | Hono API `server/`（GET league / POST・PATCH games / auth / batch） | T1,T3 | **DEV中** |
 | T5 | `src/lib/stats.ts` 個人成績・チーム集計 + Vitest | T2 | TODO |
 | T6 | フロント基盤（ルーティング / `api.ts` / パスコードダイアログ / shadcn/ui） | T4 | TODO |
 | T7 | 画面: 半荘一覧・半荘登録・編集/論理削除 | T6 | TODO |
@@ -51,6 +51,7 @@ T4（Hono API）のレビューで、以下が守られていなければ **Bloc
 | 5 | `DELETE` エンドポイントを作っていない / 物理削除していない | 決定#9 |
 | 6 | 運営系テーブル（`leagues` `teams` `members` `league_members`）への書き込みAPIを作っていない | 決定#11 |
 | 7 | 素点合計チェックが `start_point × 4`（`100000` のハードコードなし） | D-6 |
+| 8 | **形の検査（parse）を `validateGameInput` より先に置いている** | D-18。マネージャーが実際に `TypeError` を踏んで load-bearing であることを実証 |
 
 ## レビューの原則
 
@@ -196,6 +197,7 @@ APIは JSON ボディという信用できない入力を受け取るので、**
 ### D-19: `memo` は500文字以内
 理由はセキュリティではなく設計上のもの。**`GET /api/leagues/:id` が全半荘を1回で返す設計なので、1件の肥大が全員の取得を重くする**。
 `ValidationErrorCode` に `MEMO_TOO_LONG` を追加。DB側には制約を置かない（可変長の妥当な上限は業務判断であり、後から変えたくなる可能性が高いため）。
+`memo.length` は **UTF-16 コード単位**で数える（絵文字1つ = 2）。DB側に対応する CHECK が無いので不一致は起きず、T7 の文字数カウンタも同じ `.length` を使えば表示と判定が一致する（reb の申し送り）。
 
 ### D-14: `PATCH /api/games/:id` の `league_id` はリクエストから受け取らない ★T4 Blocker
 dev が発見（マネージャーも reb も見落としていた）。ボディの `leagueId` を信じると**所属チェックが自己申告になって無意味化**する。

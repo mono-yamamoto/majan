@@ -286,6 +286,19 @@ await db.batch([
 整合性はすべてAPI層の責任（バリデーションもRLSも無いのは旧構成と同じ）。`batch()` 全体が1トランザクションなので、`(SELECT MAX(id) FROM games)` は他の書き込みに割り込まれない。
 </Aside>
 
+## 削除済み半荘への書き込みを SQL で塞ぐ
+
+`PATCH /api/games/:id` は「削除済みなら 404」だが、これを **SELECT で確認 → `batch()` で書く** の2段で実装すると、その隙間に論理削除が入り込む余地が残る（TOCTOU）。入力係が1人なので実運用でまず起きないが、塞ぐのは1行で済む。
+
+`game_results` の INSERT で `game_id` を直値ではなく**サブクエリ**にする。
+
+```sql
+INSERT INTO game_results (game_id, member_id, raw_score)
+VALUES ((SELECT id FROM games WHERE id = ?1 AND deleted_at IS NULL), ?2, ?3)
+```
+
+削除済みならサブクエリが NULL を返し、`game_id` の `NOT NULL` 違反で **`batch()` 全体が巻き戻る**。API はこの失敗を 404 に写像すればよい。
+
 ## アクセス制御（旧: RLS）
 
 RLS は無くなったので、APIサーバーのミドルウェアで代替する。
@@ -299,12 +312,41 @@ RLS は無くなったので、APIサーバーのミドルウェアで代替す�
 
 ```ts title="server/auth.ts"
 export const requirePasscode: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
-  if (c.req.header('X-Passcode') !== c.env.WRITE_PASSCODE) {
+  // シークレット未設定は「認証なし」ではなく設定ミス。素通りさせない
+  if (!c.env.WRITE_PASSCODE) {
+    return c.json({ error: 'server misconfigured' }, 500);
+  }
+  const given = c.req.header('X-Passcode');
+  if (typeof given !== 'string' || given.length === 0 || given !== c.env.WRITE_PASSCODE) {
     return c.json({ error: 'invalid passcode' }, 401);
   }
   await next();
 };
 ```
+
+<Aside type="danger" title="素朴な !== 比較は「ヘッダを付けない方が通る」状態を作る">
+一つ前の版はこう書いていた。**これは書き込みAPIが無防備になる。**
+
+```ts
+// ❌ 使わない
+if (c.req.header('X-Passcode') !== c.env.WRITE_PASSCODE) { ... }
+```
+
+`c.req.header()` はヘッダが無いと `undefined` を返し、`c.env.WRITE_PASSCODE` はシークレット未設定なら `undefined`。
+**`undefined !== undefined` は `false`** なので、`if` に入らず **`next()` が呼ばれて素通りする**（実測確認済み）。空文字を設定した場合も `'' !== ''` で同じ。
+
+| ヘッダ | シークレット | 結果 |
+|---|---|---|
+| 正しい値 | 設定あり | 通す（正常） |
+| 誤った値 | 設定あり | 401（正常） |
+| **無し** | 設定あり | 401（正常） |
+| **無し** | **未設定** | **★素通り** |
+| **空文字** | **空文字** | **★素通り** |
+
+起きる条件は現実的だ。`.dev.vars` を置かずに `wrangler dev` したローカル、`wrangler secret put` を忘れた本番、シークレットを差し替える一瞬。**「認証が無い」のではなく「認証ヘッダを付けない方が通る」**という、テストでも気づきにくい形で壊れる。
+
+シークレット未設定は **500（設定ミス）** として扱い、401（認証失敗）と区別する。
+</Aside>
 
 ## マイグレーション
 
