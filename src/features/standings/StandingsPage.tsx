@@ -1,8 +1,8 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useLeague } from "@/lib/league-context";
-import { computeStats, rankMembers, type CumulativePoint } from "@/lib/stats";
-import type { ChartAxis, ChartSeries } from "./chart-rows";
+import { computeStats, rankMembers } from "@/lib/stats";
+import { buildAxis, buildGameOrder, toSeries } from "./chart-rows";
 
 /**
  * Recharts は gzip で約 105 kB あるので、この画面を開いたときにだけ読み込む（D-26）。
@@ -57,41 +57,23 @@ export function StandingsPage() {
    * どの半荘を採点したかは computeStats が scoredGameIds で返すので、
    * ここで条件を書き直さない（書き直すと状態が増えたときに食い違う）。
    */
-  const gameOrder = useMemo(() => {
-    const dateOf = new Map(games.map((g) => [g.id, g.playedOn]));
-    return new Map(
-      stats.scoredGameIds.map((id, i) => [id, { x: i + 1, label: dateOf.get(id) ?? "" }]),
-    );
-  }, [games, stats.scoredGameIds]);
-
-  const toSeries = useCallback(
-    (id: number, name: string, cumulative: CumulativePoint[]): ChartSeries => ({
-      id,
-      name,
-      points: cumulative.flatMap((c) => {
-        const at = gameOrder.get(c.gameId);
-        return at === undefined ? [] : [{ x: at.x, totalPt: c.totalPt }];
-      }),
-    }),
-    [gameOrder],
+  const gameOrder = useMemo(
+    () => buildGameOrder(games, stats.scoredGameIds),
+    [games, stats.scoredGameIds],
   );
 
   const series = useMemo(
     () =>
       mode === "team"
-        ? stats.teams.map((t) => toSeries(t.teamId, teamNameOf(t.teamId), t.cumulative))
+        ? stats.teams.map((t) => toSeries(t.teamId, teamNameOf(t.teamId), t.cumulative, gameOrder))
         : ranked
             .filter((m) => m.gameCount > 0)
-            .map((m) => toSeries(m.memberId, nameOf(m.memberId), m.cumulative)),
-    [mode, stats.teams, ranked, toSeries, teamNameOf, nameOf],
+            .map((m) => toSeries(m.memberId, nameOf(m.memberId), m.cumulative, gameOrder)),
+    [mode, stats.teams, ranked, gameOrder, teamNameOf, nameOf],
   );
 
   const playedCount = stats.scoredGameIds.length;
-  /** x 軸は採点した全半荘。系列が点を持たない半荘でも軸は欠けない */
-  const axis: ChartAxis = useMemo(
-    () => [...gameOrder.values()].sort((a, b) => a.x - b.x),
-    [gameOrder],
-  );
+  const axis = useMemo(() => buildAxis(gameOrder), [gameOrder]);
 
   return (
     <section>
