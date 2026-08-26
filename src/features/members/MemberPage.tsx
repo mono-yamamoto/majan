@@ -37,7 +37,11 @@ export function MemberPage() {
   );
   const axis = useMemo(() => buildAxis(gameOrder), [gameOrder]);
 
-  if (member === undefined || me === undefined) {
+  // 名簿から外れたメンバーでも、半荘に出ていれば成績は存在する（unassigned・D-23）。
+  // 戦績のランキングは「#99」として表示しリンクも張っているので、
+  // ここで「見つかりません」と言うと、成績があるのに無いと嘘をつくことになる。
+  // 「見つからない」のは stats にも居ないときだけ。
+  if (me === undefined) {
     return (
       <section>
         <h2 className="text-xl font-bold">メンバーが見つかりません</h2>
@@ -51,7 +55,9 @@ export function MemberPage() {
     );
   }
 
-  const teamName = teams.find((t) => t.id === roster.get(member.id))?.name;
+  const displayName = member?.name ?? `#${id}`;
+  const teamName =
+    member === undefined ? undefined : teams.find((t) => t.id === roster.get(member.id))?.name;
   const rows: [string, string][] = [
     ["半荘数", `${me.gameCount}`],
     ["合計pt", `${fmtPt(me.totalPt)}pt`],
@@ -64,16 +70,26 @@ export function MemberPage() {
   ];
 
   const series =
-    me.gameCount === 0 ? [] : [toSeries(member.id, member.name, me.cumulative, gameOrder)];
+    me.gameCount === 0 ? [] : [toSeries(me.memberId, displayName, me.cumulative, gameOrder)];
+  /** 出場した半荘の日付（1半荘だけのときに文言へ出す） */
+  const onlyGameDate =
+    me.cumulative.length === 1 ? (gameOrder.get(me.cumulative[0].gameId)?.label ?? "") : "";
 
   return (
     <section>
       <div className="flex items-baseline gap-2">
-        <h2 className="text-xl font-bold">{member.name}</h2>
+        <h2 className="text-xl font-bold">{displayName}</h2>
         {teamName === undefined ? null : (
           <span className="text-muted-foreground text-sm">{teamName}</span>
         )}
       </div>
+
+      {member === undefined ? (
+        <p className="border-border text-muted-foreground mt-4 rounded-lg border p-3 text-sm">
+          このメンバーは現在リーグ名簿にありません。過去の半荘の成績だけを表示しています
+          （チーム合計には入っていません）。
+        </p>
+      ) : null}
 
       {me.gameCount === 0 ? (
         <p className="text-muted-foreground mt-4 text-sm">
@@ -103,7 +119,18 @@ export function MemberPage() {
         ))}
       </ul>
 
-      {me.gameCount === 0 ? null : (
+      {/* 推移は2点以上あって初めて意味を持つ。1半荘だと長さ0の線しか描けず、
+          正しいが情報量ゼロの図に画面を使うことになる（しかも空白が大きいので
+          壊れているように見える）。図の代わりに事実を1行で書く */}
+      {me.gameCount === 0 ? null : me.gameCount === 1 ? (
+        <>
+          <h3 className="mt-6 font-bold">累計pt推移</h3>
+          <p className="text-muted-foreground mt-2 text-sm">
+            出場 1 半荘{onlyGameDate === "" ? "" : `（${onlyGameDate}）`}。 2
+            半荘目から推移が表示されます。
+          </p>
+        </>
+      ) : (
         <>
           <h3 className="mt-6 font-bold">累計pt推移</h3>
           <Suspense
