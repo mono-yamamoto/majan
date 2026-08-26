@@ -32,25 +32,32 @@
 --    roster.local.sql は .gitignore 済みなので、実名が git 履歴に残らない
 --    （決定 D-10 / D-11。seed.local.sql と同じ扱い）。
 
--- INSERT OR REPLACE にしている理由:
+-- ON CONFLICT ... DO UPDATE（UPSERT）にしている理由:
 --   - members は id で、league_members は PK (league_id, member_id) で衝突するので、
---     **同じ人の行だけが置き換わる**。他の人には触らない。
+--     **同じ人の行だけが更新される**。他の人には触らない。
 --   - 名前の打ち間違いも、チーム分けの変更も、このファイルを直して流し直すだけで済む。
 --
--- ★ REPLACE は「削除して入れ直す」なので、子を持つ行に使うと危ない。
---   いまは game_results / league_members の外部キーに ON DELETE CASCADE が
---   無いので、members を置き換えても子は消えない（実測確認済み）。
---   **もし将来 ON DELETE CASCADE を足すなら、このファイルを
---   `ON CONFLICT(...) DO UPDATE SET ...` に書き換えること。**
---   そのままだと、流し直した瞬間に過去の対戦成績が消える。
+-- ★ INSERT OR REPLACE には**しないこと**（短いが危ない）。
+--   REPLACE は「衝突した行を DELETE してから INSERT し直す」。
+--   members.id は game_results.member_id と league_members.member_id から
+--   参照されているので、**将来この外部キーに ON DELETE CASCADE が付いた瞬間、
+--   このファイルを流し直すと過去の対戦成績ごと消える**。
+--
+--   いまは 0001_init.sql に ON DELETE CASCADE が1つも無いので REPLACE でも
+--   壊れない（実測で確認した）。が、それは「今のスキーマがたまたまそうだから」で、
+--   誰かがコメントを読んで気づかないと守れない。
+--   DO UPDATE は UPDATE なので、**子を消しようがない**。
+--   構造的に危険が無い方を選ぶ。行数も変わらない。
 
-INSERT OR REPLACE INTO members (id, name) VALUES
+INSERT INTO members (id, name) VALUES
   (1,'山田'), (2,'佐藤'), (3,'鈴木'), (4,'田中'), (5,'高橋'),
-  (6,'伊藤'), (7,'渡辺'), (8,'中村'), (9,'小林'), (10,'加藤');
+  (6,'伊藤'), (7,'渡辺'), (8,'中村'), (9,'小林'), (10,'加藤')
+ON CONFLICT(id) DO UPDATE SET name = excluded.name;
 
 -- league_id, member_id, team_id
 -- team_id は seed.sql の teams と対応（1 = チームA / 2 = チームB）。
 -- チーム分けを変えるときは、この team_id だけを書き換える。
-INSERT OR REPLACE INTO league_members (league_id, member_id, team_id) VALUES
+INSERT INTO league_members (league_id, member_id, team_id) VALUES
   (1,1,1), (1,2,1), (1,3,1), (1,4,1), (1,5,1),   -- チームA
-  (1,6,2), (1,7,2), (1,8,2), (1,9,2), (1,10,2);  -- チームB
+  (1,6,2), (1,7,2), (1,8,2), (1,9,2), (1,10,2)   -- チームB
+ON CONFLICT(league_id, member_id) DO UPDATE SET team_id = excluded.team_id;

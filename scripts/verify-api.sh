@@ -181,8 +181,10 @@ check "seed + roster でメンバー10人"   "$(Q "SELECT COUNT(*) AS n FROM mem
 check "所属も10行"                     "$(Q "SELECT COUNT(*) AS n FROM league_members;")" "10"
 # チーム分けを変えたテンプレートを流し直す想定。member 1 を チームA(1) → チームB(2) へ。
 W d1 execute majan --local --persist-to "$PERSIST" --command \
-  "INSERT OR REPLACE INTO members (id, name) VALUES (1,'山田を直した');
-   INSERT OR REPLACE INTO league_members (league_id, member_id, team_id) VALUES (1,1,2);" >/dev/null 2>&1
+  "INSERT INTO members (id, name) VALUES (1,'山田を直した')
+     ON CONFLICT(id) DO UPDATE SET name = excluded.name;
+   INSERT INTO league_members (league_id, member_id, team_id) VALUES (1,1,2)
+     ON CONFLICT(league_id, member_id) DO UPDATE SET team_id = excluded.team_id;" >/dev/null 2>&1
 check "2回目でも行が増えない（members）" "$(Q "SELECT COUNT(*) AS n FROM members;")" "10"
 check "2回目でも行が増えない（所属）"     "$(Q "SELECT COUNT(*) AS n FROM league_members;")" "10"
 check "名前が置き換わる"                  "$(Q "SELECT name FROM members WHERE id=1;")" "山田を直した"

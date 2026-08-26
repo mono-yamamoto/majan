@@ -18,7 +18,7 @@
 --               （半荘がぶら下がっている可能性がある）。落ちる方が安全。
 --               INSERT OR IGNORE や ON CONFLICT には**しないこと**。
 --
---   roster.sql: **何度でも流せる**（INSERT OR REPLACE）。
+--   roster.sql: **何度でも流せる**（ON CONFLICT ... DO UPDATE）。
 --               チーム分けは開幕前に確定するので、決まるまで
 --               「直して流し直す」ができる必要がある。
 --
