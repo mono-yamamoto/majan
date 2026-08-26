@@ -1,0 +1,549 @@
+- generic [active] [ref=f5e1]:
+  - link "コンテンツにスキップ" [ref=f5e2] [cursor=pointer]:
+    - /url: "#_top"
+  - generic [ref=f5e3]:
+    - banner [ref=f5e4]:
+      - generic [ref=f5e5]:
+        - link "麻雀リーグ戦アプリ Guidebook" [ref=f5e7] [cursor=pointer]:
+          - /url: /
+        - button "検索" [ref=f5e11] [cursor=pointer]:
+          - generic [ref=f5e15]:
+            - generic [ref=f5e16]: ⌘
+            - generic [ref=f5e17]: K
+        - generic [ref=f5e18]:
+          - generic [ref=f5e21]:
+            - generic [ref=f5e22]: テーマの選択
+            - combobox "テーマの選択" [ref=f5e23] [cursor=pointer]:
+              - option "ダーク"
+              - option "ライト"
+              - option "自動" [selected]
+          - button "💬 コメント 0" [ref=f5e25] [cursor=pointer]:
+            - generic [ref=f5e26]: 💬 コメント
+            - generic [ref=f5e27]: "0"
+    - navigation "メイン":
+      - list [ref=f5e31]:
+        - listitem [ref=f5e32]:
+          - link "はじめに" [ref=f5e33] [cursor=pointer]:
+            - /url: /
+        - listitem [ref=f5e34]:
+          - group [ref=f5e35]:
+            - generic "仕様" [ref=f5e36] [cursor=pointer]
+            - list [ref=f5e40]:
+              - listitem [ref=f5e41]:
+                - link "概要と決めたこと" [ref=f5e42] [cursor=pointer]:
+                  - /url: /spec/overview/
+              - listitem [ref=f5e43]:
+                - link "機能と画面" [ref=f5e44] [cursor=pointer]:
+                  - /url: /spec/features/
+              - listitem [ref=f5e45]:
+                - link "ポイント計算" [ref=f5e46] [cursor=pointer]:
+                  - /url: /spec/scoring/
+              - listitem [ref=f5e47]:
+                - link "データモデル" [ref=f5e48] [cursor=pointer]:
+                  - /url: /spec/data-model/
+              - listitem [ref=f5e49]:
+                - link "技術スタック" [ref=f5e50] [cursor=pointer]:
+                  - /url: /spec/tech-stack/
+              - listitem [ref=f5e51]:
+                - link "使い方（運用）" [ref=f5e52] [cursor=pointer]:
+                  - /url: /spec/usage/
+              - listitem [ref=f5e53]:
+                - link "対局ルール" [ref=f5e54] [cursor=pointer]:
+                  - /url: /spec/rules/
+        - listitem [ref=f5e55]:
+          - group [ref=f5e56]:
+            - generic "コンポーネント例" [ref=f5e57] [cursor=pointer]
+    - generic [ref=f5e62]:
+      - complementary [ref=f5e63]:
+        - navigation [ref=f5e68]:
+          - heading "目次" [level=2] [ref=f5e69]
+          - list [ref=f5e70]:
+            - listitem [ref=f5e71]:
+              - link "概要" [ref=f5e72] [cursor=pointer]:
+                - /url: "#_top"
+            - listitem [ref=f5e73]:
+              - link "方針" [ref=f5e74] [cursor=pointer]:
+                - /url: "#方針"
+            - listitem [ref=f5e75]:
+              - link "リーグ設定（デフォルト値）" [ref=f5e76] [cursor=pointer]:
+                - /url: "#リーグ設定デフォルト値"
+            - listitem [ref=f5e77]:
+              - link "換算式" [ref=f5e78] [cursor=pointer]:
+                - /url: "#換算式"
+            - listitem [ref=f5e79]:
+              - link "計算フロー" [ref=f5e80] [cursor=pointer]:
+                - /url: "#計算フロー"
+            - listitem [ref=f5e81]:
+              - link "同点時のルール" [ref=f5e82] [cursor=pointer]:
+                - /url: "#同点時のルール"
+            - listitem [ref=f5e83]:
+              - link "丸めの扱い" [ref=f5e84] [cursor=pointer]:
+                - /url: "#丸めの扱い"
+              - list [ref=f5e85]:
+                - listitem [ref=f5e86]:
+                  - 'link "例4: 3人がトップ同点（端数が出るケース）" [ref=f5e87] [cursor=pointer]':
+                    - /url: "#例4-3人がトップ同点端数が出るケース"
+            - listitem [ref=f5e88]:
+              - link "計算例" [ref=f5e89] [cursor=pointer]:
+                - /url: "#計算例"
+              - list [ref=f5e90]:
+                - listitem [ref=f5e91]:
+                  - 'link "例1: 同点なし" [ref=f5e92] [cursor=pointer]':
+                    - /url: "#例1-同点なし"
+                - listitem [ref=f5e93]:
+                  - 'link "例2: トップ同点" [ref=f5e94] [cursor=pointer]':
+                    - /url: "#例2-トップ同点"
+                - listitem [ref=f5e95]:
+                  - 'link "例3: 2位が3人同点" [ref=f5e96] [cursor=pointer]':
+                    - /url: "#例3-2位が3人同点"
+            - listitem [ref=f5e97]:
+              - link "実装イメージ" [ref=f5e98] [cursor=pointer]:
+                - /url: "#実装イメージ"
+            - listitem [ref=f5e99]:
+              - link "テスト観点（Vitest）" [ref=f5e100] [cursor=pointer]:
+                - /url: "#テスト観点vitest"
+      - main [ref=f5e102]:
+        - heading "ポイント計算" [level=1] [ref=f5e105]
+        - generic [ref=f5e107]:
+          - generic [ref=f5e108]:
+            - generic [ref=f5e109]:
+              - heading "方針" [level=2] [ref=f5e110]
+              - link "Section titled “方針”" [ref=f5e111] [cursor=pointer]:
+                - /url: "#方針"
+            - list [ref=f5e116]:
+              - listitem [ref=f5e117]:
+                - text: DB に保存するのは
+                - strong [ref=f5e118]: 素点（raw_score）だけ
+              - listitem [ref=f5e119]:
+                - text: pt・順位はフロントで
+                - strong [ref=f5e120]: 都度計算
+                - text: する（純粋関数 + Vitest でテスト）
+              - listitem [ref=f5e121]:
+                - text: 計算に使うパラメータは
+                - code [ref=f5e122]: leagues
+                - text: テーブルの設定値。後から変えても全半荘が自動で再計算される
+              - listitem [ref=f5e123]:
+                - text: この関数は
+                - strong [ref=f5e124]: フロントと Hono API の両方から呼ぶ
+                - text: （登録時のサーバー再バリデーションで使う）。DBにもHTTPにも依存しない純粋関数として
+                - code [ref=f5e125]: src/lib/scoring.ts
+                - text: に置く
+            - button "💬 このセクションにコメント" [ref=f5e127] [cursor=pointer]
+            - generic [ref=f5e128]:
+              - heading "リーグ設定（デフォルト値）" [level=2] [ref=f5e129]
+              - link "Section titled “リーグ設定（デフォルト値）”" [ref=f5e130] [cursor=pointer]:
+                - /url: "#リーグ設定デフォルト値"
+            - table [ref=f5e135]:
+              - rowgroup [ref=f5e136]:
+                - row [ref=f5e137]:
+                  - columnheader "設定" [ref=f5e138]
+                  - columnheader "値" [ref=f5e139]
+                  - columnheader "備考" [ref=f5e140]
+              - rowgroup [ref=f5e141]:
+                - row [ref=f5e142]:
+                  - cell [ref=f5e143]:
+                    - text: 持ち点
+                    - code [ref=f5e144]: start_point
+                  - cell "25,000" [ref=f5e145]
+                  - cell "素点合計チェック = 持ち点 × 4" [ref=f5e146]
+                - row [ref=f5e147]:
+                  - cell [ref=f5e148]:
+                    - text: 返し点
+                    - code [ref=f5e149]: return_point
+                  - cell "30,000" [ref=f5e150]
+                  - cell "オカあり" [ref=f5e151]
+                - row [ref=f5e152]:
+                  - cell [ref=f5e153]:
+                    - text: ウマ
+                    - code [ref=f5e154]: uma
+                  - cell "10-30（1-3）" [ref=f5e155]
+                  - cell "1位 +30 / 2位 +10 / 3位 -10 / 4位 -30" [ref=f5e156]
+                - row [ref=f5e157]:
+                  - cell "オカ" [ref=f5e158]
+                  - cell [ref=f5e159]:
+                    - text: (返し点 − 持ち点) × 4 / 1000 =
+                    - strong [ref=f5e160]: 20pt
+                  - cell "トップに加算" [ref=f5e161]
+                - row [ref=f5e162]:
+                  - cell "小数" [ref=f5e163]
+                  - cell "第1位まで保持" [ref=f5e164]
+                  - cell [ref=f5e165]:
+                    - text: 内部は 0.1pt 単位の整数で扱う（→
+                    - link "丸めの扱い" [ref=f5e166] [cursor=pointer]:
+                      - /url: "#%E4%B8%B8%E3%82%81%E3%81%AE%E6%89%B1%E3%81%84"
+                    - text: ）
+            - button "💬 このセクションにコメント" [ref=f5e168] [cursor=pointer]
+            - generic [ref=f5e169]:
+              - heading "換算式" [level=2] [ref=f5e170]
+              - link "Section titled “換算式”" [ref=f5e171] [cursor=pointer]:
+                - /url: "#換算式"
+            - figure [ref=f5e177]:
+              - code [ref=f5e179]:
+                - generic [ref=f5e180]: pt = (素点 − 返し点) / 1000 + ウマ(順位) + オカ(1位のみ)
+              - button "Copy to clipboard" [ref=f5e183] [cursor=pointer]
+            - paragraph [ref=f5e185]:
+              - text: 4人の pt 合計は必ず
+              - strong [ref=f5e186]: "0"
+              - text: になる（ゼロサム）。テストの不変条件として使える。
+            - button "💬 このセクションにコメント" [ref=f5e188] [cursor=pointer]
+            - generic [ref=f5e189]:
+              - heading "計算フロー" [level=2] [ref=f5e190]
+              - link "Section titled “計算フロー”" [ref=f5e191] [cursor=pointer]:
+                - /url: "#計算フロー"
+            - document [ref=f5e197]:
+              - generic [ref=f5e199]:
+                - generic [ref=f5e205]:
+                  - paragraph [ref=f5e211]: なし
+                  - paragraph [ref=f5e217]: あり
+                - generic [ref=f5e218]:
+                  - paragraph [ref=f5e225]: 4人の素点
+                  - paragraph [ref=f5e232]: 素点降順でソート
+                  - paragraph [ref=f5e239]: 同点あり?
+                  - paragraph [ref=f5e246]: 順位 1..4 を確定
+                  - paragraph [ref=f5e253]: 同点グループのウマ・オカを折半
+                  - paragraph [ref=f5e260]: pt = (素点-返し点)/1000 + ウマ + オカ
+                  - paragraph [ref=f5e267]: 割り切れない端数はグループ先頭に寄せる
+                  - paragraph [ref=f5e274]: 4人分の pt / 順位を返す
+            - button "💬 このセクションにコメント" [ref=f5e276] [cursor=pointer]
+            - generic [ref=f5e277]:
+              - heading "同点時のルール" [level=2] [ref=f5e278]
+              - link "Section titled “同点時のルール”" [ref=f5e279] [cursor=pointer]:
+                - /url: "#同点時のルール"
+            - list [ref=f5e284]:
+              - listitem [ref=f5e285]:
+                - strong [ref=f5e286]: ウマを折半して山分け
+                - text: （起家の記録は不要）
+              - listitem [ref=f5e287]:
+                - strong [ref=f5e288]: トップ同点ならオカも折半
+              - listitem [ref=f5e289]: 順位は同順位扱い。平均順位の計算では「占める順位の平均」を使う（2位タイ → 2.5）
+            - button "💬 このセクションにコメント" [ref=f5e291] [cursor=pointer]
+            - generic [ref=f5e292]:
+              - heading "丸めの扱い" [level=2] [ref=f5e293]
+              - link "Section titled “丸めの扱い”" [ref=f5e294] [cursor=pointer]:
+                - /url: "#丸めの扱い"
+            - complementary "単純に round すると合計が 0 にならない" [ref=f5e299]:
+              - paragraph [ref=f5e300]: 単純に round すると合計が 0 にならない
+              - generic [ref=f5e303]:
+                - paragraph [ref=f5e304]:
+                  - strong [ref=f5e305]: 3人がトップ同点
+                  - text: のとき、オカ 20pt を3等分すると 6.666… になる。各自を独立に小数第1位へ丸めると
+                  - code [ref=f5e306]: 6.7 × 3 = 20.1
+                  - text: となり、
+                  - strong [ref=f5e307]: pt合計が +0.1 ずれてゼロサムが壊れる
+                  - text: 。
+                - paragraph [ref=f5e308]:
+                  - text: 対策として、pt は内部で
+                  - strong [ref=f5e309]: 0.1pt 単位の整数（deci-pt）
+                  - text: として計算し、グループへ配る合計を整数除算して
+                  - strong [ref=f5e310]: 余りをグループ先頭から1ずつ配る
+                  - text: 。これで合計は常に厳密に 0 になる。
+            - generic [ref=f5e311]:
+              - 'heading "例4: 3人がトップ同点（端数が出るケース）" [level=3] [ref=f5e312]'
+              - 'link "Section titled “例4: 3人がトップ同点（端数が出るケース）”" [ref=f5e313] [cursor=pointer]':
+                - /url: "#例4-3人がトップ同点端数が出るケース"
+            - paragraph [ref=f5e318]: 1〜3位が 30,000 で同点。ウマ (30 + 10 − 10)/3 = +10、オカ 20 を3等分 → 6.666…
+            - table [ref=f5e319]:
+              - rowgroup [ref=f5e320]:
+                - row [ref=f5e321]:
+                  - columnheader "順位" [ref=f5e322]
+                  - columnheader "素点" [ref=f5e323]
+                  - columnheader "素点−返し" [ref=f5e324]
+                  - columnheader "ウマ" [ref=f5e325]
+                  - columnheader "オカ" [ref=f5e326]
+                  - columnheader "pt" [ref=f5e327]
+              - rowgroup [ref=f5e328]:
+                - row [ref=f5e329]:
+                  - cell "1 (タイ)" [ref=f5e330]
+                  - cell "30,000" [ref=f5e331]
+                  - cell "±0" [ref=f5e332]
+                  - cell "+10" [ref=f5e333]
+                  - cell "+6.7" [ref=f5e334]
+                  - cell [ref=f5e335]:
+                    - strong [ref=f5e336]: "+16.7"
+                - row [ref=f5e337]:
+                  - cell "1 (タイ)" [ref=f5e338]
+                  - cell "30,000" [ref=f5e339]
+                  - cell "±0" [ref=f5e340]
+                  - cell "+10" [ref=f5e341]
+                  - cell "+6.7" [ref=f5e342]
+                  - cell [ref=f5e343]:
+                    - strong [ref=f5e344]: "+16.7"
+                - row [ref=f5e345]:
+                  - cell "1 (タイ)" [ref=f5e346]
+                  - cell "30,000" [ref=f5e347]
+                  - cell "±0" [ref=f5e348]
+                  - cell "+10" [ref=f5e349]
+                  - cell "+6.6" [ref=f5e350]
+                  - cell [ref=f5e351]:
+                    - strong [ref=f5e352]: "+16.6"
+                - row [ref=f5e353]:
+                  - cell "4" [ref=f5e354]
+                  - cell "10,000" [ref=f5e355]
+                  - cell "−20.0" [ref=f5e356]
+                  - cell "−30" [ref=f5e357]
+                  - cell "–" [ref=f5e358]
+                  - cell [ref=f5e359]:
+                    - strong [ref=f5e360]: −50.0
+            - paragraph [ref=f5e361]:
+              - text: 合計 = 16.7 + 16.7 + 16.6 − 50.0 =
+              - strong [ref=f5e362]: "0.0"
+              - text: ✓
+            - complementary "誰が 0.1 得するか" [ref=f5e363]:
+              - paragraph [ref=f5e364]: 誰が 0.1 得するか
+              - paragraph [ref=f5e368]:
+                - text: 素点も順位も完全に同じなので、0.1pt を誰に寄せるかに公平な根拠はない。ここでは
+                - strong [ref=f5e369]: メンバーID昇順で先頭から
+                - text: 配る（決定的な順序になればよく、実運用で問題になる差ではない）。気になるなら「トップ同点は起家に近い方」等のルールを足すことになるが、それは決定#3（座順を記録しない）と衝突する。
+            - button "💬 このセクションにコメント" [ref=f5e371] [cursor=pointer]
+            - button "💬 このセクションにコメント" [ref=f5e373] [cursor=pointer]
+            - generic [ref=f5e374]:
+              - heading "計算例" [level=2] [ref=f5e375]
+              - link "Section titled “計算例”" [ref=f5e376] [cursor=pointer]:
+                - /url: "#計算例"
+            - generic [ref=f5e381]:
+              - 'heading "例1: 同点なし" [level=3] [ref=f5e382]'
+              - 'link "Section titled “例1: 同点なし”" [ref=f5e383] [cursor=pointer]':
+                - /url: "#例1-同点なし"
+            - table [ref=f5e388]:
+              - rowgroup [ref=f5e389]:
+                - row [ref=f5e390]:
+                  - columnheader "順位" [ref=f5e391]
+                  - columnheader "素点" [ref=f5e392]
+                  - columnheader "素点−返し" [ref=f5e393]
+                  - columnheader "ウマ" [ref=f5e394]
+                  - columnheader "オカ" [ref=f5e395]
+                  - columnheader "pt" [ref=f5e396]
+              - rowgroup [ref=f5e397]:
+                - row [ref=f5e398]:
+                  - cell "1" [ref=f5e399]
+                  - cell "42,300" [ref=f5e400]
+                  - cell "+12.3" [ref=f5e401]
+                  - cell "+30" [ref=f5e402]
+                  - cell "+20" [ref=f5e403]
+                  - cell [ref=f5e404]:
+                    - strong [ref=f5e405]: "+62.3"
+                - row [ref=f5e406]:
+                  - cell "2" [ref=f5e407]
+                  - cell "28,100" [ref=f5e408]
+                  - cell "−1.9" [ref=f5e409]
+                  - cell "+10" [ref=f5e410]
+                  - cell "–" [ref=f5e411]
+                  - cell [ref=f5e412]:
+                    - strong [ref=f5e413]: "+8.1"
+                - row [ref=f5e414]:
+                  - cell "3" [ref=f5e415]
+                  - cell "18,400" [ref=f5e416]
+                  - cell "−11.6" [ref=f5e417]
+                  - cell "−10" [ref=f5e418]
+                  - cell "–" [ref=f5e419]
+                  - cell [ref=f5e420]:
+                    - strong [ref=f5e421]: −21.6
+                - row [ref=f5e422]:
+                  - cell "4" [ref=f5e423]
+                  - cell "11,200" [ref=f5e424]
+                  - cell "−18.8" [ref=f5e425]
+                  - cell "−30" [ref=f5e426]
+                  - cell "–" [ref=f5e427]
+                  - cell [ref=f5e428]:
+                    - strong [ref=f5e429]: −48.8
+            - paragraph [ref=f5e430]:
+              - text: 合計 = 62.3 + 8.1 − 21.6 − 48.8 =
+              - strong [ref=f5e431]: "0.0"
+              - text: ✓
+            - button "💬 このセクションにコメント" [ref=f5e433] [cursor=pointer]
+            - generic [ref=f5e434]:
+              - 'heading "例2: トップ同点" [level=3] [ref=f5e435]'
+              - 'link "Section titled “例2: トップ同点”" [ref=f5e436] [cursor=pointer]':
+                - /url: "#例2-トップ同点"
+            - paragraph [ref=f5e441]: 1位・2位が 35,000 で同点。ウマ (30+10)/2 = 20、オカ 20/2 = 10 を両者に。
+            - table [ref=f5e442]:
+              - rowgroup [ref=f5e443]:
+                - row [ref=f5e444]:
+                  - columnheader "順位" [ref=f5e445]
+                  - columnheader "素点" [ref=f5e446]
+                  - columnheader "素点−返し" [ref=f5e447]
+                  - columnheader "ウマ" [ref=f5e448]
+                  - columnheader "オカ" [ref=f5e449]
+                  - columnheader "pt" [ref=f5e450]
+              - rowgroup [ref=f5e451]:
+                - row [ref=f5e452]:
+                  - cell "1 (タイ)" [ref=f5e453]
+                  - cell "35,000" [ref=f5e454]
+                  - cell "+5.0" [ref=f5e455]
+                  - cell "+20" [ref=f5e456]
+                  - cell "+10" [ref=f5e457]
+                  - cell [ref=f5e458]:
+                    - strong [ref=f5e459]: "+35.0"
+                - row [ref=f5e460]:
+                  - cell "1 (タイ)" [ref=f5e461]
+                  - cell "35,000" [ref=f5e462]
+                  - cell "+5.0" [ref=f5e463]
+                  - cell "+20" [ref=f5e464]
+                  - cell "+10" [ref=f5e465]
+                  - cell [ref=f5e466]:
+                    - strong [ref=f5e467]: "+35.0"
+                - row [ref=f5e468]:
+                  - cell "3" [ref=f5e469]
+                  - cell "20,000" [ref=f5e470]
+                  - cell "−10.0" [ref=f5e471]
+                  - cell "−10" [ref=f5e472]
+                  - cell "–" [ref=f5e473]
+                  - cell [ref=f5e474]:
+                    - strong [ref=f5e475]: −20.0
+                - row [ref=f5e476]:
+                  - cell "4" [ref=f5e477]
+                  - cell "10,000" [ref=f5e478]
+                  - cell "−20.0" [ref=f5e479]
+                  - cell "−30" [ref=f5e480]
+                  - cell "–" [ref=f5e481]
+                  - cell [ref=f5e482]:
+                    - strong [ref=f5e483]: −50.0
+            - paragraph [ref=f5e484]:
+              - text: 合計 = 35 + 35 − 20 − 50 =
+              - strong [ref=f5e485]: "0.0"
+              - text: ✓
+            - button "💬 このセクションにコメント" [ref=f5e487] [cursor=pointer]
+            - generic [ref=f5e488]:
+              - 'heading "例3: 2位が3人同点" [level=3] [ref=f5e489]'
+              - 'link "Section titled “例3: 2位が3人同点”" [ref=f5e490] [cursor=pointer]':
+                - /url: "#例3-2位が3人同点"
+            - paragraph [ref=f5e495]: 2〜4位が 20,000 で同点。ウマ (10 − 10 − 30)/3 = −10 を3人に。
+            - table [ref=f5e496]:
+              - rowgroup [ref=f5e497]:
+                - row [ref=f5e498]:
+                  - columnheader "順位" [ref=f5e499]
+                  - columnheader "素点" [ref=f5e500]
+                  - columnheader "素点−返し" [ref=f5e501]
+                  - columnheader "ウマ" [ref=f5e502]
+                  - columnheader "オカ" [ref=f5e503]
+                  - columnheader "pt" [ref=f5e504]
+              - rowgroup [ref=f5e505]:
+                - row [ref=f5e506]:
+                  - cell "1" [ref=f5e507]
+                  - cell "40,000" [ref=f5e508]
+                  - cell "+10.0" [ref=f5e509]
+                  - cell "+30" [ref=f5e510]
+                  - cell "+20" [ref=f5e511]
+                  - cell [ref=f5e512]:
+                    - strong [ref=f5e513]: "+60.0"
+                - row [ref=f5e514]:
+                  - cell "2 (タイ)" [ref=f5e515]
+                  - cell "20,000" [ref=f5e516]
+                  - cell "−10.0" [ref=f5e517]
+                  - cell "−10" [ref=f5e518]
+                  - cell "–" [ref=f5e519]
+                  - cell [ref=f5e520]:
+                    - strong [ref=f5e521]: −20.0
+                - row [ref=f5e522]:
+                  - cell "2 (タイ)" [ref=f5e523]
+                  - cell "20,000" [ref=f5e524]
+                  - cell "−10.0" [ref=f5e525]
+                  - cell "−10" [ref=f5e526]
+                  - cell "–" [ref=f5e527]
+                  - cell [ref=f5e528]:
+                    - strong [ref=f5e529]: −20.0
+                - row [ref=f5e530]:
+                  - cell "2 (タイ)" [ref=f5e531]
+                  - cell "20,000" [ref=f5e532]
+                  - cell "−10.0" [ref=f5e533]
+                  - cell "−10" [ref=f5e534]
+                  - cell "–" [ref=f5e535]
+                  - cell [ref=f5e536]:
+                    - strong [ref=f5e537]: −20.0
+            - paragraph [ref=f5e538]:
+              - text: 合計 = 60 − 60 =
+              - strong [ref=f5e539]: "0.0"
+              - text: ✓
+            - button "💬 このセクションにコメント" [ref=f5e541] [cursor=pointer]
+            - button "💬 このセクションにコメント" [ref=f5e543] [cursor=pointer]
+            - generic [ref=f5e544]:
+              - heading "実装イメージ" [level=2] [ref=f5e545]
+              - link "Section titled “実装イメージ”" [ref=f5e546] [cursor=pointer]:
+                - /url: "#実装イメージ"
+            - figure "src/lib/scoring.ts" [ref=f5e552]:
+              - code [ref=f5e556]:
+                - generic [ref=f5e557]: "export type LeagueRule = {"
+                - generic [ref=f5e559]: "startPoint: number; // 25000"
+                - generic [ref=f5e562]: "returnPoint: number; // 30000"
+                - generic [ref=f5e565]: "uma: [number, number, number, number]; // [30, 10, -10, -30]"
+                - generic [ref=f5e568]: "};"
+                - generic [ref=f5e572]: "export type Result = { memberId: number; rawScore: number };"
+                - generic [ref=f5e574]: "export type Scored = Result & { rank: number; pt: number };"
+                - generic [ref=f5e578]: /** 4人の素点から順位と pt を求める。合計 pt は厳密に 0 になる。 */
+                - generic [ref=f5e581]:
+                  - text: "export function scoreGame(results: Result"
+                  - generic [ref=f5e582]: "[], rule"
+                  - text: ":"
+                  - generic [ref=f5e583]: LeagueRule)
+                  - text: ": Scored[] {"
+                - generic [ref=f5e584]: const okaDeci = ((rule.returnPoint - rule.startPoint) * 4) / 100; // 20pt → 200
+                - generic [ref=f5e586]: // 同点内の並びを決定的にするため、素点降順 → memberId 昇順で固定
+                - generic [ref=f5e588]: const sorted = [...results].sort(
+                - generic [ref=f5e590]: (a, b) => b.rawScore - a.rawScore || a.memberId - b.memberId
+                - generic [ref=f5e592]: );
+                - generic [ref=f5e596]: "const out: Scored[] = [];"
+                - generic [ref=f5e598]: let i = 0;
+                - generic [ref=f5e600]: "while (i < sorted.length) {"
+                - generic [ref=f5e602]: // 同点グループ [i, j)
+                - generic [ref=f5e604]: let j = i;
+                - generic [ref=f5e606]: while (j < sorted.length && sorted[j].rawScore === sorted[i].rawScore) j++;
+                - generic [ref=f5e608]: const size = j - i;
+                - generic [ref=f5e612]: // グループに配るボーナス（ウマ＋オカ）を 0.1pt 単位の整数で
+                - generic [ref=f5e614]: const umaDeci = rule.uma.slice(i, j).reduce((s, u) => s + u, 0) * 10;
+                - generic [ref=f5e616]: "const bonusDeci = umaDeci + (i === 0 ? okaDeci : 0);"
+                - generic [ref=f5e620]: // 整数除算して、余りは先頭から 1 ずつ配る（合計が厳密に一致する）
+                - generic [ref=f5e622]: const each = Math.trunc(bonusDeci / size);
+                - generic [ref=f5e624]: let rest = bonusDeci - each * size;
+                - generic [ref=f5e628]: "for (let k = i; k < j; k++) {"
+                - generic [ref=f5e630]: const baseDeci = Math.round((sorted[k].rawScore - rule.returnPoint) / 100);
+                - generic [ref=f5e632]: "const extra = rest > 0 ? 1 : rest < 0 ? -1 : 0;"
+                - generic [ref=f5e634]: rest -= extra;
+                - generic [ref=f5e637]: "out.push({ ...sorted[k], rank: i + 1, pt: (baseDeci + each + extra) / 10 });"
+                - generic [ref=f5e640]: "}"
+                - generic [ref=f5e643]: i = j;
+                - generic [ref=f5e646]: "}"
+                - generic [ref=f5e649]: return out;
+                - generic [ref=f5e651]: "}"
+              - button "Copy to clipboard" [ref=f5e654] [cursor=pointer]
+            - complementary "ノート" [ref=f5e656]:
+              - paragraph [ref=f5e657]: ノート
+              - paragraph [ref=f5e661]:
+                - code [ref=f5e662]: rank
+                - text: は同点グループの先頭順位（1,1,3,4 のような形）。平均順位の計算時は
+                - code [ref=f5e663]: (i+1 + j) / 2
+                - text: の「占める順位の平均」を別途使う。
+            - button "💬 このセクションにコメント" [ref=f5e665] [cursor=pointer]
+            - generic [ref=f5e666]:
+              - heading "テスト観点（Vitest）" [level=2] [ref=f5e667]
+              - link "Section titled “テスト観点（Vitest）”" [ref=f5e668] [cursor=pointer]:
+                - /url: "#テスト観点vitest"
+            - list [ref=f5e673]:
+              - listitem [ref=f5e674]: 例1〜4 の期待値どおりになること
+              - listitem [ref=f5e675]:
+                - strong [ref=f5e676]: 任意の入力で 4人の pt 合計が厳密に 0 になること
+                - text: （3人同点トップのような端数ケースを必ず含める）
+              - listitem [ref=f5e677]: 同じ入力に対して常に同じ結果が返ること（同点時の 0.1pt の寄せ先が安定していること）
+              - listitem [ref=f5e678]:
+                - text: 素点合計が 100,000 でない入力は
+                - strong [ref=f5e679]: フロントとAPIの両方
+                - text: で弾かれること
+              - listitem [ref=f5e680]: "設定を変えたとき（例: ウマ 5-10、オカなし = 返し点 25,000）に結果が追従すること"
+              - listitem [ref=f5e681]:
+                - text: 4人全員が同点（25,000 × 4）のとき、全員 pt =
+                - strong [ref=f5e682]: "0.0"
+                - text: になること（素点−返し点 −5.0 + ウマ 0 + オカ 20/4 = +5.0）
+            - button "💬 このセクションにコメント" [ref=f5e684] [cursor=pointer]
+          - generic [ref=f5e686]:
+            - link "前へ 機能と画面" [ref=f5e687] [cursor=pointer]:
+              - /url: /spec/features/
+            - link "次へ データモデル" [ref=f5e691] [cursor=pointer]:
+              - /url: /spec/data-model/
+  - generic [ref=f5e695]:
+    - button "💬 ページ全体にコメント" [ref=f5e697] [cursor=pointer]
+    - button "Claude にコメントを送る" [ref=f5e698] [cursor=pointer]:
+      - generic [ref=f5e699]: Claude に送る
+  - generic [ref=f5e704]:
+    - button [ref=f5e705]
+    - button [ref=f5e711]
+    - button [ref=f5e715]
+    - button [ref=f5e720]

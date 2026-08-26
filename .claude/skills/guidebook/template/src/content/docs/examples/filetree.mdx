@@ -1,0 +1,50 @@
+---
+title: FileTree
+description: Starlight 標準のディレクトリツリー表示
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+`<FileTree>` は Starlight 標準。Markdown のネストされたリストをディレクトリ表現に変換する。
+
+## features/ の構造
+
+<FileTree>
+- src/
+  - app/
+    - layout.tsx
+    - page.tsx
+    - main-area.tsx
+    - providers.tsx
+  - features/
+    - buildings/
+      - types.ts
+      - use-buildings.ts
+      - building-card.tsx
+    - search/
+      - search-result-list.tsx
+      - use-filtered-buildings.ts
+    - map-view/
+      - map-view.tsx
+      - marker-pin.tsx
+      - use-fit-bounds.ts
+  - lib/
+    - query-client.ts
+  - test/
+    - render-with-query.tsx
+</FileTree>
+
+## 強調 / 注釈
+
+<FileTree>
+- package.json
+- src/
+  - app/
+    - layout.tsx
+    - **page.tsx** 太字で強調
+  - features/
+    - search/
+      - search-result-list.tsx 説明をインラインで書ける
+- public/
+- dist/ ビルド成果物（gitignore）
+</FileTree>

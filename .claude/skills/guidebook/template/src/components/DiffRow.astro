@@ -1,0 +1,16 @@
+---
+import StatusTag from './StatusTag.astro';
+
+interface Props {
+  status: 'add' | 'mod' | 'del' | 'keep';
+  path?: string;
+}
+
+const { status, path } = Astro.props;
+---
+
+<tr>
+  <td><StatusTag status={status} /></td>
+  <td>{path ? <code>{path}</code> : null}</td>
+  <td><slot /></td>
+</tr>

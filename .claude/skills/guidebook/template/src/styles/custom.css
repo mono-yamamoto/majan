@@ -1,0 +1,65 @@
+:root {
+  --sl-font: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #dbeafe;
+  --sl-color-accent: #2563eb;
+  --sl-color-accent-high: #1e3a8a;
+  --sl-color-bg: #fafaf9;
+}
+
+.gb-tag {
+  display: inline-block;
+  padding: 0 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.gb-tag--add {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.gb-tag--mod {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.gb-tag--del {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.gb-tag--keep {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.gb-difftable {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.875rem;
+}
+
+.gb-difftable th,
+.gb-difftable td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  vertical-align: top;
+}
+
+.gb-difftable th {
+  background: var(--sl-color-gray-6);
+  font-weight: 600;
+}
+
+.gb-difftable td code {
+  background: var(--sl-color-bg-inline-code);
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+}

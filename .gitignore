@@ -1,0 +1,27 @@
+# dependencies
+**/node_modules
+
+# build output
+dist/
+
+# tooling caches
+.wrangler/
+.astro/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# D1 backups (wrangler d1 export)
+backups/
+
+# os / editor
+.DS_Store
+*.log
+
+# Claude Code のローカル設定（マシン固有）
+.claude/settings.local.json

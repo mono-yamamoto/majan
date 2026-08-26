@@ -1,0 +1,75 @@
+---
+title: Mermaid 図
+description: flowchart / sequence / class などをコードブロックで書く
+---
+
+`astro-mermaid` integration によって、` ```mermaid ` の code block が自動で SVG に描画される。
+
+## Flowchart
+
+```mermaid
+flowchart LR
+    User[ユーザー] --> Search[検索フォーム]
+    Search --> Filter[useFilteredBuildings]
+    Filter --> Query[useBuildings + TanStack Query]
+    Query --> API[/api/v1/buildings]
+    Filter --> List[SearchResultList]
+    Filter --> Map[MapView]
+```
+
+## Sequence
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant L as SearchResultList
+    participant H as useFilteredBuildings
+    participant Q as TanStack Query
+    participant A as /api/v1/buildings
+
+    U->>L: 検索条件入力
+    L->>H: 引数として渡す
+    H->>Q: useBuildings()
+    Q->>A: HTTP GET（初回のみ）
+    A-->>Q: buildings JSON
+    Q-->>H: data
+    H-->>L: filtered buildings
+    L-->>U: 描画
+```
+
+## Class
+
+```mermaid
+classDiagram
+    class Building {
+        +string id
+        +string name
+        +Coordinates coordinates
+        +Financial[] financials
+        +CapRateHistory[] capRateHistories
+        +Transfer? transfer
+    }
+    class Financial {
+        +number rent
+        +number occupancyRate
+    }
+    class CapRateHistory {
+        +number capRate
+        +string recordedAt
+    }
+    Building "1" --> "many" Financial
+    Building "1" --> "many" CapRateHistory
+```
+
+## State
+
+```mermaid
+stateDiagram-v2
+    [*] --> idle: 初期表示
+    idle --> searching: 条件入力
+    searching --> result: 1 件以上ヒット
+    searching --> empty: 0 件
+    result --> searching: 条件変更
+    empty --> searching: 条件変更
+    result --> [*]: ページ離脱
+```

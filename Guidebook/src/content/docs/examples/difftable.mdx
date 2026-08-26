@@ -1,0 +1,35 @@
+---
+title: DiffTable / StatusTag
+description: 追加 / 変更 / 削除 / 据置 のタグ付きテーブル
+---
+
+import DiffTable from '../../../components/DiffTable.astro';
+import DiffRow from '../../../components/DiffRow.astro';
+import StatusTag from '../../../components/StatusTag.astro';
+
+## ファイル変更一覧
+
+<DiffTable>
+  <DiffRow status="add" path="src/lib/query-client.ts">QueryClient の factory</DiffRow>
+  <DiffRow status="add" path="src/app/providers.tsx">QueryClientProvider を mount する Client Component</DiffRow>
+  <DiffRow status="mod" path="src/features/buildings/use-buildings.ts"><code>useState</code> + <code>useEffect</code> → <code>useQuery</code></DiffRow>
+  <DiffRow status="del" path="src/legacy/old-fetcher.ts">不要になった旧実装</DiffRow>
+  <DiffRow status="keep" path="src/features/buildings/types.ts">参照のみ</DiffRow>
+</DiffTable>
+
+## 列ラベルを差し替え
+
+<DiffTable statusLabel="区分" pathLabel="対象" noteLabel="変更内容">
+  <DiffRow status="add" path="src/app/main-area.tsx">view 分岐 + APIProvider</DiffRow>
+  <DiffRow status="mod" path="src/app/page.tsx">右カラムを <code>&lt;MainArea /&gt;</code> に切り出し</DiffRow>
+</DiffTable>
+
+## StatusTag 単体
+
+タグだけ文中に埋めることもできる。
+
+- <StatusTag status="add" /> 新規追加
+- <StatusTag status="mod" /> 既存改修
+- <StatusTag status="del" /> 削除
+- <StatusTag status="keep" /> 変更なし
+- <StatusTag status="add" label="NEW" /> ラベル上書き

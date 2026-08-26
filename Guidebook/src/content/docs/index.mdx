@@ -1,0 +1,33 @@
+---
+title: 麻雀リーグ戦アプリ Guidebook
+description: 10人・2チーム制の麻雀リーグ戦アプリの要件と設計
+template: splash
+hero:
+  title: 麻雀リーグ戦アプリ
+  tagline: 10人 / 5人×2チーム のリーグ戦を、素点を入力するだけで集計するアプリ。Vite+ + React + Hono + Cloudflare Workers + D1（SQLite）のサーバーレス構成
+  actions:
+    - text: 決めたことを見る
+      link: /spec/overview/
+      icon: right-arrow
+      variant: primary
+    - text: 使い方
+      link: /spec/usage/
+      icon: open-book
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="概要と決めたこと" icon="document">
+    2026-08-18 のヒアリング（/grill-me）で決まった要件の一覧と、その理由。
+  </Card>
+  <Card title="ポイント計算" icon="star">
+    素点 → リーグptの換算式。ウマ・オカ・同点折半の扱い、計算例つき。
+  </Card>
+  <Card title="データモデル" icon="seti:db">
+    リーグ > 半荘 > 4人の結果。ER図・SQLite（D1）スキーマ・バックアップ方針。
+  </Card>
+  <Card title="使い方（運用）" icon="rocket">
+    メンバー登録（wrangler でSQL直投入）から半荘入力・戦績確認・バックアップまでの流れ。
+  </Card>
+</CardGrid>

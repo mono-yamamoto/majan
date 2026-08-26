@@ -1,0 +1,22 @@
+---
+interface Props {
+  statusLabel?: string;
+  pathLabel?: string;
+  noteLabel?: string;
+}
+
+const { statusLabel = '種別', pathLabel = 'パス', noteLabel = '役割' } = Astro.props;
+---
+
+<table class="gb-difftable">
+  <thead>
+    <tr>
+      <th>{statusLabel}</th>
+      <th>{pathLabel}</th>
+      <th>{noteLabel}</th>
+    </tr>
+  </thead>
+  <tbody>
+    <slot />
+  </tbody>
+</table>

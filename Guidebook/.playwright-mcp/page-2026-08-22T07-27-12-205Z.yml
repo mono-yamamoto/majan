@@ -1,0 +1,518 @@
+- generic [active] [ref=f1e1]:
+  - link "コンテンツにスキップ" [ref=f1e2] [cursor=pointer]:
+    - /url: "#_top"
+  - generic [ref=f1e3]:
+    - banner [ref=f1e4]:
+      - generic [ref=f1e5]:
+        - link "麻雀リーグ戦アプリ Guidebook" [ref=f1e7] [cursor=pointer]:
+          - /url: /
+        - button "検索" [ref=f1e11] [cursor=pointer]:
+          - generic [ref=f1e15]:
+            - generic [ref=f1e16]: ⌘
+            - generic [ref=f1e17]: K
+        - generic [ref=f1e18]:
+          - generic [ref=f1e21]:
+            - generic [ref=f1e22]: テーマの選択
+            - combobox "テーマの選択" [ref=f1e23] [cursor=pointer]:
+              - option "ダーク"
+              - option "ライト"
+              - option "自動" [selected]
+          - button "💬 コメント 0" [ref=f1e25] [cursor=pointer]:
+            - generic [ref=f1e26]: 💬 コメント
+            - generic [ref=f1e27]: "0"
+    - navigation "メイン":
+      - list [ref=f1e31]:
+        - listitem [ref=f1e32]:
+          - link "はじめに" [ref=f1e33] [cursor=pointer]:
+            - /url: /
+        - listitem [ref=f1e34]:
+          - group [ref=f1e35]:
+            - generic "仕様" [ref=f1e36] [cursor=pointer]
+            - list [ref=f1e40]:
+              - listitem [ref=f1e41]:
+                - link "概要と決めたこと" [ref=f1e42] [cursor=pointer]:
+                  - /url: /spec/overview/
+              - listitem [ref=f1e43]:
+                - link "機能と画面" [ref=f1e44] [cursor=pointer]:
+                  - /url: /spec/features/
+              - listitem [ref=f1e45]:
+                - link "ポイント計算" [ref=f1e46] [cursor=pointer]:
+                  - /url: /spec/scoring/
+              - listitem [ref=f1e47]:
+                - link "データモデル" [ref=f1e48] [cursor=pointer]:
+                  - /url: /spec/data-model/
+              - listitem [ref=f1e49]:
+                - link "技術スタック" [ref=f1e50] [cursor=pointer]:
+                  - /url: /spec/tech-stack/
+              - listitem [ref=f1e51]:
+                - link "使い方（運用）" [ref=f1e52] [cursor=pointer]:
+                  - /url: /spec/usage/
+              - listitem [ref=f1e53]:
+                - link "対局ルール" [ref=f1e54] [cursor=pointer]:
+                  - /url: /spec/rules/
+        - listitem [ref=f1e55]:
+          - group [ref=f1e56]:
+            - generic "コンポーネント例" [ref=f1e57] [cursor=pointer]
+    - generic [ref=f1e62]:
+      - complementary [ref=f1e63]:
+        - navigation [ref=f1e68]:
+          - heading "目次" [level=2] [ref=f1e69]
+          - list [ref=f1e70]:
+            - listitem [ref=f1e71]:
+              - link "概要" [ref=f1e72] [cursor=pointer]:
+                - /url: "#_top"
+            - listitem [ref=f1e73]:
+              - link "構造" [ref=f1e74] [cursor=pointer]:
+                - /url: "#構造"
+            - listitem [ref=f1e75]:
+              - link "テーブル説明" [ref=f1e76] [cursor=pointer]:
+                - /url: "#テーブル説明"
+            - listitem [ref=f1e77]:
+              - link "Postgres からの型の読み替え" [ref=f1e78] [cursor=pointer]:
+                - /url: "#postgres-からの型の読み替え"
+            - listitem [ref=f1e79]:
+              - link "スキーマ" [ref=f1e80] [cursor=pointer]:
+                - /url: "#スキーマ"
+            - listitem [ref=f1e81]:
+              - link "制約・ルール" [ref=f1e82] [cursor=pointer]:
+                - /url: "#制約ルール"
+            - listitem [ref=f1e83]:
+              - link "書き込みの原子性" [ref=f1e84] [cursor=pointer]:
+                - /url: "#書き込みの原子性"
+            - listitem [ref=f1e85]:
+              - 'link "アクセス制御（旧: RLS）" [ref=f1e86] [cursor=pointer]':
+                - /url: "#アクセス制御旧-rls"
+            - listitem [ref=f1e87]:
+              - link "マイグレーション" [ref=f1e88] [cursor=pointer]:
+                - /url: "#マイグレーション"
+            - listitem [ref=f1e89]:
+              - link "バックアップ" [ref=f1e90] [cursor=pointer]:
+                - /url: "#バックアップ"
+      - main [ref=f1e92]:
+        - heading "データモデル" [level=1] [ref=f1e95]
+        - generic [ref=f1e97]:
+          - generic [ref=f1e98]:
+            - generic [ref=f1e99]:
+              - heading "構造" [level=2] [ref=f1e100]
+              - link "Section titled “構造”" [ref=f1e101] [cursor=pointer]:
+                - /url: "#構造"
+            - paragraph [ref=f1e106]:
+              - strong [ref=f1e107]: リーグ > 半荘（日付付き） > 4人の結果
+              - text: 。「節」テーブルは作らない。
+            - generic [ref=f1e108]: "erDiagram leagues ||--o{ teams : has leagues ||--o{ league_members : has leagues ||--o{ games : has teams ||--o{ league_members : \"belongs\" members ||--o{ league_members : \"joins\" games ||--|{ game_results : \"4 rows\" members ||--o{ game_results : \"scores\" leagues { INTEGER id PK TEXT name INTEGER start_point \"25000\" INTEGER return_point \"30000\" INTEGER uma_1st \"30\" INTEGER uma_2nd \"10\" INTEGER uma_3rd \"-10\" INTEGER uma_4th \"-30\" TEXT created_at \"ISO8601 UTC\" } teams { INTEGER id PK INTEGER league_id FK TEXT name } members { INTEGER id PK TEXT name } league_members { INTEGER league_id FK INTEGER member_id FK INTEGER team_id FK } games { INTEGER id PK INTEGER league_id FK TEXT played_on \"YYYY-MM-DD\" TEXT memo TEXT created_at \"ISO8601 UTC\" TEXT deleted_at \"論理削除 / NULL\" } game_results { INTEGER id PK INTEGER game_id FK INTEGER member_id FK INTEGER raw_score \"素点\" }"
+            - button "💬 このセクションにコメント" [ref=f1e110] [cursor=pointer]
+            - generic [ref=f1e111]:
+              - heading "テーブル説明" [level=2] [ref=f1e112]
+              - link "Section titled “テーブル説明”" [ref=f1e113] [cursor=pointer]:
+                - /url: "#テーブル説明"
+            - table [ref=f1e118]:
+              - rowgroup [ref=f1e119]:
+                - row [ref=f1e120]:
+                  - columnheader "テーブル" [ref=f1e121]
+                  - columnheader "役割" [ref=f1e122]
+                  - columnheader "誰が書く" [ref=f1e123]
+              - rowgroup [ref=f1e124]:
+                - row [ref=f1e125]:
+                  - cell [ref=f1e126]:
+                    - code [ref=f1e127]: leagues
+                  - cell "リーグ（シーズン）と換算ルール設定" [ref=f1e128]
+                  - cell "運営がDBファイル直" [ref=f1e129]
+                - row [ref=f1e130]:
+                  - cell [ref=f1e131]:
+                    - code [ref=f1e132]: teams
+                  - cell "リーグ内のチーム（2つ）" [ref=f1e133]
+                  - cell "運営がDBファイル直" [ref=f1e134]
+                - row [ref=f1e135]:
+                  - cell [ref=f1e136]:
+                    - code [ref=f1e137]: members
+                  - cell "人のマスタ（リーグ横断）" [ref=f1e138]
+                  - cell "運営がDBファイル直" [ref=f1e139]
+                - row [ref=f1e140]:
+                  - cell [ref=f1e141]:
+                    - code [ref=f1e142]: league_members
+                  - cell "誰がどのリーグのどのチームか" [ref=f1e143]
+                  - cell "運営がDBファイル直" [ref=f1e144]
+                - row [ref=f1e145]:
+                  - cell [ref=f1e146]:
+                    - code [ref=f1e147]: games
+                  - cell "半荘。日付・メモ・論理削除フラグ" [ref=f1e148]
+                  - cell [ref=f1e149]:
+                    - strong [ref=f1e150]: アプリ（入力係）
+                - row [ref=f1e151]:
+                  - cell [ref=f1e152]:
+                    - code [ref=f1e153]: game_results
+                  - cell "半荘ごとの4人の素点" [ref=f1e154]
+                  - cell [ref=f1e155]:
+                    - strong [ref=f1e156]: アプリ（入力係）
+            - button "💬 このセクションにコメント" [ref=f1e158] [cursor=pointer]
+            - generic [ref=f1e159]:
+              - heading "Postgres からの型の読み替え" [level=2] [ref=f1e160]
+              - link "Section titled “Postgres からの型の読み替え”" [ref=f1e161] [cursor=pointer]:
+                - /url: "#postgres-からの型の読み替え"
+            - paragraph [ref=f1e166]:
+              - text: SQLite の型は
+              - code [ref=f1e167]: INTEGER
+              - text: /
+              - code [ref=f1e168]: REAL
+              - text: /
+              - code [ref=f1e169]: TEXT
+              - text: /
+              - code [ref=f1e170]: BLOB
+              - text: の4つだけ。Supabase 版から次のように置き換える。
+            - table [ref=f1e171]:
+              - rowgroup [ref=f1e172]:
+                - row [ref=f1e173]:
+                  - columnheader "Supabase (Postgres)" [ref=f1e174]
+                  - columnheader "SQLite" [ref=f1e175]
+                  - columnheader "補足" [ref=f1e176]
+              - rowgroup [ref=f1e177]:
+                - row [ref=f1e178]:
+                  - cell [ref=f1e179]:
+                    - code [ref=f1e180]: uuid
+                  - cell [ref=f1e181]:
+                    - code [ref=f1e182]: INTEGER PRIMARY KEY
+                  - cell [ref=f1e183]:
+                    - text: rowid のエイリアスで最速。
+                    - strong [ref=f1e184]: 手でSQLを打つ運用なので短いIDの方が実用的
+                - row [ref=f1e185]:
+                  - cell [ref=f1e186]:
+                    - code [ref=f1e187]: timestamptz
+                  - cell [ref=f1e188]:
+                    - code [ref=f1e189]: TEXT
+                    - text: （ISO8601, UTC）
+                  - cell [ref=f1e190]:
+                    - code [ref=f1e191]: DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+                - row [ref=f1e192]:
+                  - cell [ref=f1e193]:
+                    - code [ref=f1e194]: date
+                  - cell [ref=f1e195]:
+                    - code [ref=f1e196]: TEXT
+                    - text: （
+                    - code [ref=f1e197]: YYYY-MM-DD
+                    - text: ）
+                  - cell "SQLite の日付関数がそのまま使える形式" [ref=f1e198]
+                - row [ref=f1e199]:
+                  - cell [ref=f1e200]:
+                    - code [ref=f1e201]: int
+                  - cell [ref=f1e202]:
+                    - code [ref=f1e203]: INTEGER
+                  - cell "同じ" [ref=f1e204]
+                - row [ref=f1e205]:
+                  - cell [ref=f1e206]:
+                    - code [ref=f1e207]: text
+                  - cell [ref=f1e208]:
+                    - code [ref=f1e209]: TEXT
+                  - cell "同じ" [ref=f1e210]
+                - row [ref=f1e211]:
+                  - cell [ref=f1e212]:
+                    - code [ref=f1e213]: boolean
+                  - cell "（使わない）" [ref=f1e214]
+                  - cell [ref=f1e215]:
+                    - text: 論理削除は
+                    - code [ref=f1e216]: deleted_at
+                    - text: の NULL 判定で表現
+            - complementary "ID を uuid から INTEGER に変えた理由" [ref=f1e217]:
+              - paragraph [ref=f1e218]: ID を uuid から INTEGER に変えた理由
+              - paragraph [ref=f1e222]:
+                - text: 管理UIを作らず
+                - code [ref=f1e223]: sqlite3
+                - text: CLI で直接データを入れる方針（決定#11）だと、uuid は手打ちが現実的に無理。
+                - code [ref=f1e224]: INTEGER PRIMARY KEY
+                - text: なら
+                - code [ref=f1e225]: seed.sql
+                - text: が人間に読める形になり、URLも
+                - code [ref=f1e226]: /games/12
+                - text: と短くなる。10人規模でID衝突の心配もない。
+            - button "💬 このセクションにコメント" [ref=f1e228] [cursor=pointer]
+            - generic [ref=f1e229]:
+              - heading "スキーマ" [level=2] [ref=f1e230]
+              - link "Section titled “スキーマ”" [ref=f1e231] [cursor=pointer]:
+                - /url: "#スキーマ"
+            - figure "db/migrations/0001_init.sql" [ref=f1e237]:
+              - code [ref=f1e241]:
+                - generic [ref=f1e242]: CREATE TABLE leagues (
+                - generic [ref=f1e244]: id INTEGER PRIMARY KEY,
+                - generic [ref=f1e247]: name TEXT NOT NULL,
+                - generic [ref=f1e249]: start_point INTEGER NOT NULL DEFAULT 25000,
+                - generic [ref=f1e252]: return_point INTEGER NOT NULL DEFAULT 30000,
+                - generic [ref=f1e255]: uma_1st INTEGER NOT NULL DEFAULT 30,
+                - generic [ref=f1e258]: uma_2nd INTEGER NOT NULL DEFAULT 10,
+                - generic [ref=f1e261]: uma_3rd INTEGER NOT NULL DEFAULT -10,
+                - generic [ref=f1e264]: uma_4th INTEGER NOT NULL DEFAULT -30,
+                - generic [ref=f1e267]: created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+                - generic [ref=f1e270]: ) STRICT;
+                - generic [ref=f1e274]: CREATE TABLE members (
+                - generic [ref=f1e276]: id INTEGER PRIMARY KEY,
+                - generic [ref=f1e279]: name TEXT NOT NULL
+                - generic [ref=f1e281]: ) STRICT;
+                - generic [ref=f1e285]: CREATE TABLE teams (
+                - generic [ref=f1e287]: id INTEGER PRIMARY KEY,
+                - generic [ref=f1e290]: league_id INTEGER NOT NULL REFERENCES leagues(id),
+                - generic [ref=f1e293]: name TEXT NOT NULL
+                - generic [ref=f1e295]: ) STRICT;
+                - generic [ref=f1e299]: CREATE TABLE league_members (
+                - generic [ref=f1e301]: league_id INTEGER NOT NULL REFERENCES leagues(id),
+                - generic [ref=f1e304]: member_id INTEGER NOT NULL REFERENCES members(id),
+                - generic [ref=f1e307]: team_id INTEGER NOT NULL REFERENCES teams(id),
+                - generic [ref=f1e310]: PRIMARY KEY (league_id, member_id)
+                - generic [ref=f1e312]: ) STRICT;
+                - generic [ref=f1e316]: CREATE TABLE games (
+                - generic [ref=f1e318]: id INTEGER PRIMARY KEY,
+                - generic [ref=f1e321]: league_id INTEGER NOT NULL REFERENCES leagues(id),
+                - generic [ref=f1e324]: played_on TEXT NOT NULL,
+                - generic [ref=f1e327]: memo TEXT,
+                - generic [ref=f1e330]: created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+                - generic [ref=f1e333]: deleted_at TEXT
+                - generic [ref=f1e336]: ) STRICT;
+                - generic [ref=f1e340]: CREATE TABLE game_results (
+                - generic [ref=f1e342]: id INTEGER PRIMARY KEY,
+                - generic [ref=f1e345]: game_id INTEGER NOT NULL REFERENCES games(id),
+                - generic [ref=f1e348]: member_id INTEGER NOT NULL REFERENCES members(id),
+                - generic [ref=f1e351]: raw_score INTEGER NOT NULL CHECK (raw_score % 100 = 0),
+                - generic [ref=f1e354]: UNIQUE (game_id, member_id)
+                - generic [ref=f1e356]: ) STRICT;
+                - generic [ref=f1e360]: CREATE INDEX idx_games_league_played ON games(league_id, played_on);
+                - generic [ref=f1e362]: CREATE INDEX idx_results_game ON game_results(game_id);
+                - generic [ref=f1e364]: CREATE INDEX idx_results_member ON game_results(member_id);
+              - button "Copy to clipboard" [ref=f1e367] [cursor=pointer]
+            - complementary "STRICT を付ける" [ref=f1e369]:
+              - paragraph [ref=f1e370]: STRICT を付ける
+              - paragraph [ref=f1e375]:
+                - text: SQLite は既定だと
+                - code [ref=f1e376]: INTEGER
+                - text: カラムに文字列を入れても通ってしまう。
+                - code [ref=f1e377]: STRICT
+                - text: を付けると型が強制されるので、Postgres 相当の安心感が得られる。付けない理由がない。
+            - button "💬 このセクションにコメント" [ref=f1e379] [cursor=pointer]
+            - generic [ref=f1e380]:
+              - heading "制約・ルール" [level=2] [ref=f1e381]
+              - link "Section titled “制約・ルール”" [ref=f1e382] [cursor=pointer]:
+                - /url: "#制約ルール"
+            - list [ref=f1e387]:
+              - listitem [ref=f1e388]:
+                - code [ref=f1e389]: game_results
+                - text: は 1
+                - code [ref=f1e390]: game
+                - text: につき必ず 4 行（
+                - strong [ref=f1e391]: APIサーバー側で保証
+                - text: 。DBは
+                - code [ref=f1e392]: UNIQUE(game_id, member_id)
+                - text: ）
+              - listitem [ref=f1e393]:
+                - code [ref=f1e394]: raw_score
+                - text: は 100 の倍数、負数可（
+                - code [ref=f1e395]: CHECK (raw_score % 100 = 0)
+                - text: ）
+              - listitem [ref=f1e396]:
+                - text: 素点合計 =
+                - code [ref=f1e397]: start_point × 4
+                - text: 、2-2 固定は
+                - strong [ref=f1e398]: APIサーバー側でバリデーション
+                - text: （DBトリガーにはしない。シンプル優先）
+              - listitem [ref=f1e399]:
+                - text: 削除は
+                - code [ref=f1e400]: games.deleted_at
+                - text: をセット。取得時は
+                - code [ref=f1e401]: deleted_at IS NULL
+                - text: で絞る
+              - listitem [ref=f1e402]:
+                - text: オカは
+                - code [ref=f1e403]: (return_point − start_point) × 4 / 1000
+                - text: で導出できるので
+                - strong [ref=f1e404]: カラムにしない
+              - listitem [ref=f1e405]:
+                - text: 外部キーを効かせるには接続ごとに
+                - code [ref=f1e406]: PRAGMA foreign_keys = ON
+                - text: が必要（→
+                - link "技術スタック" [ref=f1e407] [cursor=pointer]:
+                  - /url: /spec/tech-stack/
+                - text: ）
+            - complementary "pt/順位はDBに持たない" [ref=f1e408]:
+              - paragraph [ref=f1e409]: pt/順位はDBに持たない
+              - paragraph [ref=f1e413]:
+                - code [ref=f1e414]: game_results
+                - text: に pt や rank のカラムは置かない。フロントで
+                - code [ref=f1e415]: leagues
+                - text: の設定値から都度計算する。ルール変更時に過去分を再計算する手間がゼロになる。
+            - button "💬 このセクションにコメント" [ref=f1e417] [cursor=pointer]
+            - generic [ref=f1e418]:
+              - heading "書き込みの原子性" [level=2] [ref=f1e419]
+              - link "Section titled “書き込みの原子性”" [ref=f1e420] [cursor=pointer]:
+                - /url: "#書き込みの原子性"
+            - paragraph [ref=f1e425]:
+              - text: 半荘の登録は
+              - code [ref=f1e426]: games
+              - text: 1行 +
+              - code [ref=f1e427]: game_results
+              - text: 4行の
+              - strong [ref=f1e428]: セットで初めて意味を持つ
+              - text: 。途中で落ちると3人分だけの壊れた半荘が残るので、必ずトランザクションで囲む。
+            - figure "server/routes/games.ts" [ref=f1e430]:
+              - code [ref=f1e434]:
+                - generic [ref=f1e436]:
+                  - text: "const createGame = db.transaction((input:"
+                  - generic [ref=f1e437]: GameInput)
+                  - text: "=> {"
+                - generic [ref=f1e438]: "const { lastInsertRowid } = db"
+                - generic [ref=f1e441]: .query('INSERT INTO games (league_id, played_on, memo) VALUES (?, ?, ?)')
+                - generic [ref=f1e444]: .run(input.leagueId, input.playedOn, input.memo ?? null);
+                - generic [ref=f1e447]: const stmt = db.query(
+                - generic [ref=f1e450]: "'INSERT INTO game_results (game_id, member_id, raw_score) VALUES (?, ?, ?)'"
+                - generic [ref=f1e452]: );
+                - generic [ref=f1e454]: for (const r of input.results) stmt.run(lastInsertRowid, r.memberId, r.rawScore);
+                - generic [ref=f1e457]: return lastInsertRowid;
+                - generic [ref=f1e460]: "});"
+              - button "Copy to clipboard" [ref=f1e463] [cursor=pointer]
+            - complementary "Supabase では意識しなくてよかった点" [ref=f1e465]:
+              - paragraph [ref=f1e466]: Supabase では意識しなくてよかった点
+              - paragraph [ref=f1e470]:
+                - text: supabase-js だと insert が1リクエスト＝1トランザクションだったが、SQLite を直接叩く構成では
+                - strong [ref=f1e471]:
+                  - text: 自分で
+                  - code [ref=f1e472]: db.transaction()
+                  - text: を書かないと保証されない
+                - text: 。バリデーションもRLSも無いので、整合性はすべてAPI層の責任になる。
+            - button "💬 このセクションにコメント" [ref=f1e474] [cursor=pointer]
+            - generic [ref=f1e475]:
+              - 'heading "アクセス制御（旧: RLS）" [level=2] [ref=f1e476]'
+              - 'link "Section titled “アクセス制御（旧: RLS）”" [ref=f1e477] [cursor=pointer]':
+                - /url: "#アクセス制御旧-rls"
+            - paragraph [ref=f1e482]: RLS は無くなったので、APIサーバーのミドルウェアで代替する。
+            - table [ref=f1e483]:
+              - rowgroup [ref=f1e484]:
+                - row [ref=f1e485]:
+                  - columnheader "メソッド" [ref=f1e486]
+                  - columnheader "対象" [ref=f1e487]
+                  - columnheader "制御" [ref=f1e488]
+              - rowgroup [ref=f1e489]:
+                - row [ref=f1e490]:
+                  - cell [ref=f1e491]:
+                    - code [ref=f1e492]: GET /api/**
+                  - cell "閲覧全般" [ref=f1e493]
+                  - cell [ref=f1e494]:
+                    - strong [ref=f1e495]: 誰でも可
+                    - text: （認証なし）
+                - row [ref=f1e496]:
+                  - cell [ref=f1e497]:
+                    - code [ref=f1e498]: POST
+                    - text: /
+                    - code [ref=f1e499]: PATCH /api/games**
+                  - cell "半荘の登録・修正・論理削除" [ref=f1e500]
+                  - cell [ref=f1e501]:
+                    - strong [ref=f1e502]:
+                      - code [ref=f1e503]: X-Passcode
+                      - text: ヘッダが
+                      - code [ref=f1e504]: WRITE_PASSCODE
+                      - text: と一致した時だけ通す
+                - row [ref=f1e505]:
+                  - cell [ref=f1e506]:
+                    - code [ref=f1e507]: DELETE
+                  - cell "–" [ref=f1e508]
+                  - cell [ref=f1e509]:
+                    - strong [ref=f1e510]: エンドポイントを作らない
+                    - text: （論理削除のみ。事故防止）
+                - row [ref=f1e511]:
+                  - cell "運営系テーブル" [ref=f1e512]
+                  - cell [ref=f1e513]:
+                    - code [ref=f1e514]: leagues
+                    - code [ref=f1e515]: teams
+                    - code [ref=f1e516]: members
+                    - code [ref=f1e517]: league_members
+                  - cell [ref=f1e518]:
+                    - strong [ref=f1e519]: 書き込みAPIを作らない
+                    - text: 。DBファイル直操作のみ
+            - figure "server/auth.ts" [ref=f1e521]:
+              - code [ref=f1e525]:
+                - generic [ref=f1e526]: "export const requirePasscode: MiddlewareHandler = async (c, next) => {"
+                - generic [ref=f1e528]: "if (c.req.header('X-Passcode') !== process.env.WRITE_PASSCODE) {"
+                - generic [ref=f1e531]: "return c.json({ error: 'invalid passcode' }, 401);"
+                - generic [ref=f1e534]: "}"
+                - generic [ref=f1e537]: await next();
+                - generic [ref=f1e540]: "};"
+              - button "Copy to clipboard" [ref=f1e543] [cursor=pointer]
+            - button "💬 このセクションにコメント" [ref=f1e546] [cursor=pointer]
+            - generic [ref=f1e547]:
+              - heading "マイグレーション" [level=2] [ref=f1e548]
+              - link "Section titled “マイグレーション”" [ref=f1e549] [cursor=pointer]:
+                - /url: "#マイグレーション"
+            - list [ref=f1e554]:
+              - listitem [ref=f1e555]:
+                - code [ref=f1e556]: db/migrations/
+                - text: に連番SQLを置き、
+                - code [ref=f1e557]: db/migrate.ts
+                - text: が未適用分を順に流す
+              - listitem [ref=f1e558]:
+                - text: 適用済みバージョンは SQLite 組み込みの
+                - code [ref=f1e559]: PRAGMA user_version
+                - text: で管理する（管理テーブル不要）
+              - listitem [ref=f1e560]:
+                - text: 型は生成せず、
+                - code [ref=f1e561]: src/lib/types.ts
+                - text: に
+                - strong [ref=f1e562]: 手書き
+                - text: する（テーブル7個・カラム30個弱なので生成ツールに見合わない）
+              - listitem [ref=f1e563]:
+                - text: 初期データ（メンバー10人・リーグ・チーム・所属）は
+                - code [ref=f1e564]: db/seed.sql
+            - figure "db/migrate.ts（考え方）" [ref=f1e566]:
+              - code [ref=f1e570]:
+                - generic [ref=f1e571]: const current = db.query('PRAGMA user_version').get().user_version;
+                - generic [ref=f1e573]: "for (const [i, sql] of migrations.entries()) {"
+                - generic [ref=f1e575]: if (i + 1 <= current) continue;
+                - generic [ref=f1e577]: "db.transaction(() => {"
+                - generic [ref=f1e580]: db.exec(sql);
+                - generic [ref=f1e583]: "db.exec(`PRAGMA user_version = ${i + 1}`);"
+                - generic [ref=f1e586]: "})();"
+                - generic [ref=f1e589]: "}"
+              - button "Copy to clipboard" [ref=f1e592] [cursor=pointer]
+            - complementary "SQLite の ALTER TABLE は弱い" [ref=f1e594]:
+              - paragraph [ref=f1e595]: SQLite の ALTER TABLE は弱い
+              - paragraph [ref=f1e599]:
+                - text: SQLite は
+                - code [ref=f1e600]: ALTER TABLE ... ADD COLUMN
+                - text: と
+                - code [ref=f1e601]: RENAME
+                - text: しかできない。
+                - strong [ref=f1e602]: カラムの型変更・制約追加・削除ができない
+                - text: ので、後からスキーマを変えるときは「新テーブル作成 →
+                - code [ref=f1e603]: INSERT INTO ... SELECT
+                - text: → 旧テーブル DROP → RENAME」の手順を踏む。Postgres より migration のコストが高いので、初回のスキーマは慎重に決める。
+            - button "💬 このセクションにコメント" [ref=f1e605] [cursor=pointer]
+            - generic [ref=f1e606]:
+              - heading "バックアップ" [level=2] [ref=f1e607]
+              - link "Section titled “バックアップ”" [ref=f1e608] [cursor=pointer]:
+                - /url: "#バックアップ"
+            - paragraph [ref=f1e613]: マネージドDBの自動バックアップが無くなった分、ここは自前で用意する（決定#17）。
+            - figure "Terminal window" [ref=f1e615]:
+              - code [ref=f1e620]:
+                - generic [ref=f1e621]: "# 稼働中でも安全にコピーできる（WAL中の書き込みと競合しない）"
+                - generic [ref=f1e623]: fly ssh console -C "sqlite3 /data/majan.db \".backup '/data/backup.db'\""
+                - generic [ref=f1e625]: fly sftp get /data/backup.db ./backups/majan-2026-08-22.db
+              - button "Copy to clipboard" [ref=f1e628] [cursor=pointer]
+            - complementary "cp では取らない" [ref=f1e630]:
+              - paragraph [ref=f1e631]: cp では取らない
+              - paragraph [ref=f1e635]:
+                - text: WAL モードで稼働中のDBファイルを
+                - code [ref=f1e636]: cp
+                - text: すると、
+                - code [ref=f1e637]: "-wal"
+                - text: ファイルに残った未反映の書き込みが失われて壊れたコピーになる可能性がある。必ず
+                - code [ref=f1e638]: sqlite3 .backup
+                - text: か
+                - code [ref=f1e639]: VACUUM INTO
+                - text: を使う。
+            - button "💬 このセクションにコメント" [ref=f1e641] [cursor=pointer]
+          - generic [ref=f1e643]:
+            - link "前へ ポイント計算" [ref=f1e644] [cursor=pointer]:
+              - /url: /spec/scoring/
+            - link "次へ 技術スタック" [ref=f1e648] [cursor=pointer]:
+              - /url: /spec/tech-stack/
+  - generic [ref=f1e652]:
+    - button "💬 ページ全体にコメント" [ref=f1e654] [cursor=pointer]
+    - button "Claude にコメントを送る" [ref=f1e655] [cursor=pointer]:
+      - generic [ref=f1e656]: Claude に送る
+  - generic [ref=f1e661]:
+    - button [ref=f1e662]
+    - button [ref=f1e668]
+    - button [ref=f1e672]
+    - button [ref=f1e677]

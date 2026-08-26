@@ -1,0 +1,30 @@
+---
+title: Guidebook
+description: 実装ガイドブック
+template: splash
+hero:
+  title: 実装ガイドブック
+  tagline: コード解説 / 設計メモ / 図解の置き場
+  actions:
+    - text: コンポーネント例を見る
+      link: /examples/difftable/
+      icon: right-arrow
+      variant: primary
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="DiffTable" icon="document">
+    差分付きテーブル。`before` / `after` / `status` を 1 行で並べる。
+  </Card>
+  <Card title="StatusTag" icon="approve-check">
+    add / mod / del / keep を色付きバッジで表示。
+  </Card>
+  <Card title="Mermaid" icon="star">
+    flowchart / sequence / class などを MDX 内に直書き。
+  </Card>
+  <Card title="FileTree" icon="seti:folder">
+    Starlight 標準の `<FileTree>` でディレクトリ構造を表示。
+  </Card>
+</CardGrid>

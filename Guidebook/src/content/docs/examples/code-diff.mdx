@@ -1,0 +1,48 @@
+---
+title: コードブロック + diff
+description: Starlight 標準の Expressive Code で diff / 強調 / ファイル名表示
+---
+
+Starlight は内部で [Expressive Code](https://expressive-code.com/) を使用。`// [!code ++]` 等のマーカーで diff を可視化できる。
+
+## 行頭マーカー方式
+
+```ts
+const config = {
+  retry: 1,
+  staleTime: 5 * 60 * 1000, // [!code ++]
+  refetchOnWindowFocus: false, // [!code ++]
+  cacheTime: 10 * 60 * 1000, // [!code --]
+};
+```
+
+## ファイル名タイトル
+
+```ts title="src/lib/query-client.ts"
+import { QueryClient } from '@tanstack/react-query';
+
+export const createQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: { staleTime: 5 * 60 * 1000 },
+    },
+  });
+```
+
+## 行範囲ハイライト
+
+```tsx {3-5} title="src/app/providers.tsx"
+'use client';
+import { QueryClientProvider } from '@tanstack/react-query';
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [client] = useState(() => createQueryClient());
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+```
+
+## diff 言語指定（GitHub 風）
+
+```diff lang="ts"
+- const data = await fetchBuildings();
++ const { data } = useBuildings();
+```

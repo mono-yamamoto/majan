@@ -1,0 +1,19 @@
+---
+type Status = 'add' | 'mod' | 'del' | 'keep';
+
+interface Props {
+  status: Status;
+  label?: string;
+}
+
+const { status, label } = Astro.props;
+
+const defaults: Record<Status, string> = {
+  add: '追加',
+  mod: '変更',
+  del: '削除',
+  keep: '据置',
+};
+---
+
+<span class={`gb-tag gb-tag--${status}`}>{label ?? defaults[status]}</span>
