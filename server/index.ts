@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { games } from "./routes/games";
+import { leagues } from "./routes/leagues";
 
 export type Bindings = {
   DB: D1Database; // wrangler.jsonc の d1_databases で注入される
@@ -7,7 +9,10 @@ export type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// 疎通確認用。T4 で /api/leagues・/api/games を生やす。
+// 疎通確認用
 app.get("/api/health", (c) => c.json({ ok: true }));
+
+app.route("/", leagues);
+app.route("/", games);
 
 export default app;
