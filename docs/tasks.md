@@ -442,7 +442,7 @@ reb の環境ではビューポートを変えられなかった（`resize_windo
 
 ## ★ 本番稼働（2026-08-27）
 
-**https://majan.y-yamamoto-ced.workers.dev**
+**本番 URL は公開リポジトリに書かない**（山本さんの指示・2026-08-27）。`wrangler deploy` の出力か Cloudflare のダッシュボードで確認する
 
 ```
 /api/health          → {"ok":true}
