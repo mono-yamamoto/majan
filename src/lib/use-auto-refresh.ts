@@ -32,7 +32,12 @@ import { useEffect, useRef } from "react";
 /** 取り直す間隔。半荘が終わって登録されるまで（数十分）に対して十分細かい */
 export const REFRESH_INTERVAL_MS = 30_000;
 
-export function useAutoRefresh(reload: () => void): void {
+/**
+ * @param paused 止めているあいだ true。登録シートが開いている間に使う。
+ *   シートは自動更新する画面の上に開くので、止めないと下でポーリングが
+ *   回り続け、裏の登録で再描画が走って入力中のものを巻き込みうる。
+ */
+export function useAutoRefresh(reload: () => void, paused = false): void {
   const lastAt = useRef(0);
 
   useEffect(() => {
@@ -75,6 +80,11 @@ export function useAutoRefresh(reload: () => void): void {
       }
     };
 
+    if (paused) {
+      // 止めている間は、見えるようになっても取りに行かない
+      return;
+    }
+
     if (document.visibilityState === "visible") start();
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
@@ -84,5 +94,5 @@ export function useAutoRefresh(reload: () => void): void {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, [reload]);
+  }, [reload, paused]);
 }

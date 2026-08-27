@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { buildAxis, buildGameOrder, toSeries } from "@/features/standings/chart-rows";
 import { useLeague } from "@/lib/league-context";
+import { useNewGameSheet } from "@/lib/new-game-sheet";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { computeStats } from "@/lib/stats";
 
@@ -19,8 +20,9 @@ const fmtScore = (v: number | null) =>
 
 export function MemberPage() {
   const { league, members, teams, games, roster, reload } = useLeague();
-  // 見るだけの画面なので自動更新する（入力中のフォームが無い）
-  useAutoRefresh(reload);
+  // 見るだけの画面なので自動更新する（入力中のフォームが無い）。
+  // ただし登録シートが開いている間は止める（上に書き込む UI が載るため）
+  useAutoRefresh(reload, useNewGameSheet().open);
   const { leagueId, memberId } = useParams();
 
   const rule = useMemo(

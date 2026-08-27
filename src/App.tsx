@@ -1,5 +1,14 @@
-import { useState } from "react";
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useParams } from "react-router";
+import { useCallback, useMemo, useState } from "react";
+import {
+  BrowserRouter,
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router";
 import { LeagueIndex } from "@/components/LeagueIndex";
 import { PasscodeDialog } from "@/components/PasscodeDialog";
 import { Button } from "@/components/ui/button";
@@ -12,6 +21,8 @@ import { RulesPage } from "@/features/rules/RulesPage";
 import { StandingsPage } from "@/features/standings/StandingsPage";
 import { LeagueProvider } from "@/components/LeagueProvider";
 import { useLeague } from "@/lib/league-context";
+import { NewGameSheetContext } from "@/lib/new-game-sheet";
+import { NewGameSheet } from "@/features/games/NewGameSheet";
 
 function Header() {
   const { league } = useLeague();
@@ -92,7 +103,7 @@ function NavItem({
  *   高さではなく padding に入れているので、バーの背景は画面の下端まで伸びる。
  * - `100vh` / `h-screen` は使わない（iOS Safari でアドレスバーの分ずれる）。
  */
-function BottomNav() {
+function BottomNav({ onOpenNew }: { onOpenNew: () => void }) {
   const { leagueId } = useParams();
   const { pathname } = useLocation();
   const base = `/leagues/${leagueId}`;
@@ -139,12 +150,15 @@ function BottomNav() {
           </NavItem>
         </div>
         <div className="flex justify-end">
-          <Link
-            to={`${base}/games/new`}
+          {/* 遷移ではなくシートを開く。ルート（/games/new）は残してあるので、
+              ブックマークや戦績の「半荘を登録する」リンクはそのまま生きる */}
+          <button
+            type="button"
+            onClick={onOpenNew}
             className="bg-primary text-primary-foreground hover:bg-primary/80 shrink-0 rounded-lg px-4 py-2 text-sm font-medium"
           >
             登録
-          </Link>
+          </button>
         </div>
       </div>
     </nav>
@@ -161,6 +175,44 @@ function LeagueLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <LeagueProvider leagueId={id}>
+      <LeagueShell>{children}</LeagueShell>
+    </LeagueProvider>
+  );
+}
+
+/**
+ * ヘッダ・本文・下バー・登録シートの入れ物。
+ *
+ * `LeagueProvider` の**中**に置く（シートが `useLeague` を使うため）。
+ * シートの開閉は context で配り、見るだけの画面はそれを見て自動更新を止める。
+ */
+function LeagueShell({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  /**
+   * シートの開閉は**履歴に載せる**。ローカルな state にすると、スマホの「戻る」で
+   * シートが閉じずに**ページごと戻ってしまう**（実測。入力も消えて別の画面に出る）。
+   * 下から出るシートを戻る操作で閉じるのは、スマホでは一番使われる閉じ方。
+   *
+   * パスは変えず `state` だけ載せるので、**下の画面はそのまま描かれ続ける**。
+   * 「下の画面を残したまま URL だけ変える」仕組みは要らない。
+   */
+  const newOpen = (location.state as { newGame?: boolean } | null)?.newGame === true;
+  const setNewOpen = useCallback(
+    (open: boolean) => {
+      if (open) {
+        void navigate(location.pathname + location.search, { state: { newGame: true } });
+      } else if (newOpen) {
+        void navigate(-1);
+      }
+    },
+    [navigate, location.pathname, location.search, newOpen],
+  );
+  const sheet = useMemo(() => ({ open: newOpen, setOpen: setNewOpen }), [newOpen, setNewOpen]);
+
+  return (
+    <NewGameSheetContext value={sheet}>
       <Header />
       {/* 下固定のバーに隠れないよう、バーの高さ + セーフエリア + 余白ぶん空ける。
           これが足りないと、登録画面の「保存」ボタンがバーの裏に入って押せなくなる */}
@@ -170,8 +222,9 @@ function LeagueLayout({ children }: { children: React.ReactNode }) {
       >
         {children}
       </main>
-      <BottomNav />
-    </LeagueProvider>
+      <BottomNav onOpenNew={() => setNewOpen(true)} />
+      <NewGameSheet open={newOpen} onOpenChange={setNewOpen} />
+    </NewGameSheetContext>
   );
 }
 
