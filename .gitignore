@@ -33,3 +33,8 @@ backups/
 
 # Claude Code のローカル設定（マシン固有）
 .claude/settings.local.json
+
+# 役一覧の参考画像（QuizKnock の制作物）。
+# 事実（役名・翻数・食い下がり）は自作の一覧表に起こしてあるので、
+# 画像そのものは公開リポジトリにも公開サイトにも置かない。
+MJ_yaku*.jpg
