@@ -13,6 +13,7 @@
  */
 
 import { useLeague } from "@/lib/league-context";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 
 function Table({ title, rows }: { title: string; rows: [string, React.ReactNode][] }) {
   return (
@@ -31,7 +32,9 @@ function Table({ title, rows }: { title: string; rows: [string, React.ReactNode]
 }
 
 export function RulesPage() {
-  const { league } = useLeague();
+  const { league, reload } = useLeague();
+  // 見るだけの画面なので自動更新する（入力中のフォームが無い）
+  useAutoRefresh(reload);
 
   const startPoint = league.startPoint.toLocaleString();
   const returnPoint = league.returnPoint.toLocaleString();

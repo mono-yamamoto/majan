@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { toRows, type ChartAxis, type ChartSeries } from "./chart-rows";
+import {
+  buildAxis,
+  buildGameOrder,
+  toRows,
+  toSeries,
+  type ChartAxis,
+  type ChartSeries,
+} from "./chart-rows";
 
 const series = (id: number, points: [number, number][]): ChartSeries => ({
   id,
@@ -9,7 +16,7 @@ const series = (id: number, points: [number, number][]): ChartSeries => ({
 
 /** 採点した半荘が n 件ある想定の x 軸 */
 const axis = (n: number): ChartAxis =>
-  Array.from({ length: n }, (_, i) => ({ x: i + 1, label: `2026-09-0${i + 1}` }));
+  Array.from({ length: n }, (_, i) => ({ x: i + 1, label: `2026-09-0${i + 1}`, title: null }));
 
 describe("toRows / 累計の持ち越し", () => {
   /**
@@ -82,5 +89,71 @@ describe("toRows / 累計の持ち越し", () => {
   it("系列が空でも落ちない", () => {
     expect(toRows([], axis(0))).toEqual([]);
     expect(toRows([series(1, [])], axis(2)).map((r) => r.s1)).toEqual([null, null]);
+  });
+});
+
+/**
+ * 同じ日に複数の半荘があるケース。
+ *
+ * ここが無かったので、**XAxis のキーが label（日付）のままでも
+ * テストが通っていた**。実際には同じ日の半荘がカテゴリ軸で1つに畳まれ、
+ * 2件目以降のツールチップを出せなかった（実測で再現）。
+ */
+describe("buildGameOrder / 同じ日に複数の半荘", () => {
+  const games = [
+    { id: 10, playedOn: "2026-09-01", title: "朝の部" },
+    { id: 11, playedOn: "2026-09-01", title: "昼の部" },
+    { id: 12, playedOn: "2026-09-01", title: null },
+    { id: 13, playedOn: "2026-09-02", title: "翌日" },
+  ];
+
+  it("★ 同じ日でも x は別々になる（畳まれない）", () => {
+    const order = buildGameOrder(games, [10, 11, 12, 13]);
+    expect([...order.values()].map((v) => v.x)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("★ 同じ日の3件が、軸の上で別々の点になる", () => {
+    const axis = buildAxis(buildGameOrder(games, [10, 11, 12, 13]));
+    expect(axis).toHaveLength(4);
+    expect(axis.filter((a) => a.label === "2026-09-01")).toHaveLength(3);
+    // x が一意（ここが重複すると Recharts が畳む）
+    expect(new Set(axis.map((a) => a.x)).size).toBe(4);
+  });
+
+  it("title を持ち回る（ツールチップの見出しに使う）", () => {
+    const axis = buildAxis(buildGameOrder(games, [10, 11, 12, 13]));
+    expect(axis.map((a) => a.title)).toEqual(["朝の部", "昼の部", null, "翌日"]);
+  });
+
+  it("採点していない半荘は軸に出ない", () => {
+    const axis = buildAxis(buildGameOrder(games, [10, 13]));
+    expect(axis.map((a) => [a.x, a.label, a.title])).toEqual([
+      [1, "2026-09-01", "朝の部"],
+      [2, "2026-09-02", "翌日"],
+    ]);
+  });
+
+  it("games に無い id は空のラベルになる（落ちない）", () => {
+    const axis = buildAxis(buildGameOrder(games, [99]));
+    expect(axis).toEqual([{ x: 1, label: "", title: null }]);
+  });
+
+  it("★ 同じ日の2件目以降でも、系列の点が別々に対応する", () => {
+    const order = buildGameOrder(games, [10, 11, 12, 13]);
+    const s = toSeries(
+      1,
+      "山田",
+      [
+        { gameId: 10, totalPt: 10 },
+        { gameId: 11, totalPt: 20 },
+        { gameId: 12, totalPt: 30 },
+      ],
+      order,
+    );
+    expect(s.points).toEqual([
+      { x: 1, totalPt: 10 },
+      { x: 2, totalPt: 20 },
+      { x: 3, totalPt: 30 },
+    ]);
   });
 });

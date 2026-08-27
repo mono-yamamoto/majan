@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { useLeague } from "@/lib/league-context";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { scoreGame } from "@/lib/scoring";
 import { isReserved, isScorable } from "@/lib/stats";
 
@@ -26,7 +27,9 @@ function GameHeading({ game }: { game: Game }) {
 }
 
 export function GamesPage() {
-  const { games, members, league, roster } = useLeague();
+  const { games, members, league, roster, reload } = useLeague();
+  // 見るだけの画面なので自動更新する（入力中のフォームが無い）
+  useAutoRefresh(reload);
   const { leagueId } = useParams();
   const base = `/leagues/${leagueId}`;
 

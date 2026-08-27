@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { buildAxis, buildGameOrder, toSeries } from "@/features/standings/chart-rows";
 import { useLeague } from "@/lib/league-context";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { computeStats } from "@/lib/stats";
 
 /** 戦績と同じチャンク。個人成績を開いても新しく落とすものは増えない（D-26） */
@@ -17,7 +18,9 @@ const fmtScore = (v: number | null) =>
   v === null || !Number.isFinite(v) ? "–" : v.toLocaleString();
 
 export function MemberPage() {
-  const { league, members, teams, games, roster } = useLeague();
+  const { league, members, teams, games, roster, reload } = useLeague();
+  // 見るだけの画面なので自動更新する（入力中のフォームが無い）
+  useAutoRefresh(reload);
   const { leagueId, memberId } = useParams();
 
   const rule = useMemo(

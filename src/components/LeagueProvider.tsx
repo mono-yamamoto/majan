@@ -30,11 +30,26 @@ export function LeagueProvider({
     let cancelled = false;
     void fetchLeague(leagueId).then((result) => {
       if (cancelled) return;
-      setState(
-        result.ok
-          ? { status: "ready", response: result.data }
-          : { status: "error", failure: result },
-      );
+      setState((prev) => {
+        if (result.ok) {
+          // ★ 中身が同じなら状態を差し替えない。
+          //   自動更新で30秒ごとに新しいオブジェクトを入れると、参照が変わるだけで
+          //   全画面が再描画され、**グラフの線が毎回描き直される**（T19 でアニメーションを
+          //   入れたため）。スクロール位置も飛びうる。
+          //   レスポンスは 2KB 程度なので、比較のコストは無視できる。
+          if (
+            prev.status === "ready" &&
+            JSON.stringify(prev.response) === JSON.stringify(result.data)
+          ) {
+            return prev;
+          }
+          return { status: "ready", response: result.data };
+        }
+        // ★ 取得に失敗しても、既に出ているデータは消さない。
+        //   電波が切れただけかもしれないので、黙って次の回に賭ける。
+        //   初回の失敗だけはエラー画面を出す（出すものが無いため）。
+        return prev.status === "ready" ? prev : { status: "error", failure: result };
+      });
     });
     return () => {
       cancelled = true;

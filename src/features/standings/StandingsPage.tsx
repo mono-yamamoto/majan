@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useLeague } from "@/lib/league-context";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { computeStats, rankMembers } from "@/lib/stats";
 import { buildAxis, buildGameOrder, toSeries } from "./chart-rows";
 
@@ -17,7 +18,9 @@ const fmtPt = (pt: number) => `${pt > 0 ? "+" : ""}${pt.toFixed(1)}`;
 const MEDALS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
 export function StandingsPage() {
-  const { league, members, teams, games, roster } = useLeague();
+  const { league, members, teams, games, roster, reload } = useLeague();
+  // 見るだけの画面なので自動更新する（入力中のフォームが無い）
+  useAutoRefresh(reload);
   const { leagueId } = useParams();
   const [mode, setMode] = useState<"team" | "member">("team");
 

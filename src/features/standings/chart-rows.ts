@@ -16,7 +16,7 @@ export type ChartSeries = {
  * 系列が持つ点の和集合から作ると、その半荘に誰も出ていない（＝系列が点を持たない）
  * ときに軸が欠ける。軸は系列と独立に決まるものなので呼び出し側から渡す。
  */
-export type ChartAxis = { x: number; label: string }[];
+export type ChartAxis = { x: number; label: string; title: string | null }[];
 
 /**
  * 系列ごとに出場した半荘だけを持つので、x 軸（半荘の通し番号）で突き合わせて
@@ -49,22 +49,32 @@ export function toRows(
 }
 
 /**
- * 半荘の通し番号（x）と日付ラベルの対応。
+ * 半荘の通し番号（x）と、日付・タイトルの対応。
  *
  * 日付をそのまま x にすると同じ日の複数半荘が重なるので、採点した半荘の
  * 並び順を x にする。どの半荘を採点したかは computeStats の scoredGameIds が
  * 持っているので、画面側で条件を書き直さない。
+ *
+ * **title も持つ**のは、ツールチップの見出しに出すため。x（通し番号）だけだと
+ * 「3」と出て何の半荘か分からず、日付だけだと同じ日の複数半荘を見分けられない。
  */
 export function buildGameOrder(
-  games: { id: number; playedOn: string }[],
+  games: { id: number; playedOn: string; title: string | null }[],
   scoredGameIds: number[],
-): Map<number, { x: number; label: string }> {
-  const dateOf = new Map(games.map((g) => [g.id, g.playedOn]));
-  return new Map(scoredGameIds.map((id, i) => [id, { x: i + 1, label: dateOf.get(id) ?? "" }]));
+): Map<number, { x: number; label: string; title: string | null }> {
+  const info = new Map(games.map((g) => [g.id, { label: g.playedOn, title: g.title }]));
+  return new Map(
+    scoredGameIds.map((id, i) => [
+      id,
+      { x: i + 1, label: info.get(id)?.label ?? "", title: info.get(id)?.title ?? null },
+    ]),
+  );
 }
 
 /** x 軸。採点した全半荘を並べる（系列が点を持たない半荘でも欠けない） */
-export function buildAxis(gameOrder: Map<number, { x: number; label: string }>): ChartAxis {
+export function buildAxis(
+  gameOrder: Map<number, { x: number; label: string; title: string | null }>,
+): ChartAxis {
   return [...gameOrder.values()].sort((a, b) => a.x - b.x);
 }
 
@@ -76,7 +86,7 @@ export function toSeries(
   id: number,
   name: string,
   cumulative: { gameId: number; totalPt: number }[],
-  gameOrder: Map<number, { x: number; label: string }>,
+  gameOrder: Map<number, { x: number; label: string; title: string | null }>,
 ): ChartSeries {
   return {
     id,
