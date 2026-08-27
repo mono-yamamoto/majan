@@ -27,6 +27,7 @@ import {
   PARENT_ROWS,
   type ScoreRow,
 } from "./scores-table";
+import { splitBigHandName } from "./big-hand-name";
 
 function ScoreTable({ title, note, rows }: { title: string; note: string; rows: ScoreRow[] }) {
   return (
@@ -103,42 +104,53 @@ export function ScoresPage() {
       </p>
 
       <h3 className="mt-6 font-bold">満貫以上</h3>
-      <p className="text-muted-foreground mt-1 text-xs">
-        符と翻に依りません。子のツモは「子から-親から」、親のツモは各家から。
-      </p>
+      <p className="text-muted-foreground mt-1 text-xs">符と翻に依りません。</p>
       {/*
-        ここは横に振らせない。役名が「三倍満（11-12翻）」と長く、16px にすると
-        固定列だけで 212px（320px 幅の残りは 74px）になって、振っても読めない。
-        1役1ブロックの縦積みなら、子と親を並べたまま 320px に収まる（実測）。
+        符と翻の表と**同じ作り**（固定列＋横スライド＋スナップ）に揃える。
+        2つの表で操作が違うと使いにくい。
+
+        役名は表示のときだけ2行に割る（`splitBigHandName`）。「三倍満（11-12翻）」を
+        1行で出すと固定列が 212px になり、320px では右に 74px しか残らない。
+        翻数は落とさず、小さく2行目に置く。
       */}
-      <ul className="mt-2 space-y-2">
-        {BIG_HANDS.map((h) => (
-          <li key={h.name} className="border-border rounded-lg border p-3">
-            <p className="font-medium">{h.name}</p>
-            <table className="mt-1 w-full text-base tabular-nums">
-              <thead>
-                <tr className="text-muted-foreground text-xs">
-                  <th className="w-10 text-left font-normal"></th>
-                  <th className="text-left font-normal">子</th>
-                  <th className="text-left font-normal">親</th>
+      <div className="border-border mt-2 snap-x snap-mandatory scroll-pl-24 overflow-x-auto rounded-lg border">
+        <table className="w-max border-collapse text-base tabular-nums">
+          <thead>
+            <tr className="border-border border-b">
+              <th className="bg-background border-border sticky left-0 z-10 w-24 border-r px-2 py-1 text-left font-medium"></th>
+              <th className="snap-start px-2 py-1 text-left font-medium">子 ロン</th>
+              <th className="snap-start px-2 py-1 text-left font-medium">
+                子 ツモ
+                <span className="text-muted-foreground block text-xs font-normal">子-親</span>
+              </th>
+              <th className="snap-start px-2 py-1 text-left font-medium">親 ロン</th>
+              <th className="snap-start px-2 py-1 text-left font-medium">
+                親 ツモ
+                <span className="text-muted-foreground block text-xs font-normal">各家から</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {BIG_HANDS.map((h) => {
+              const [name, han] = splitBigHandName(h.name);
+              return (
+                <tr key={h.name} className="border-border border-b last:border-b-0">
+                  <th className="bg-background border-border sticky left-0 z-10 w-24 border-r px-2 py-1 text-left font-medium">
+                    {name}
+                    {han === null ? null : (
+                      <span className="text-muted-foreground block text-xs font-normal">{han}</span>
+                    )}
+                  </th>
+                  <td className="snap-start px-2 py-1 whitespace-nowrap">{h.childRon}</td>
+                  <td className="snap-start px-2 py-1 whitespace-nowrap">{h.childTsumo}</td>
+                  <td className="snap-start px-2 py-1 whitespace-nowrap">{h.parentRon}</td>
+                  <td className="snap-start px-2 py-1 whitespace-nowrap">{h.parentTsumo}</td>
                 </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <th className="text-muted-foreground text-left text-xs font-normal">ロン</th>
-                  <td className="whitespace-nowrap">{h.childRon}</td>
-                  <td className="whitespace-nowrap">{h.parentRon}</td>
-                </tr>
-                <tr>
-                  <th className="text-muted-foreground text-left text-xs font-normal">ツモ</th>
-                  <td className="whitespace-nowrap">{h.childTsumo}</td>
-                  <td className="whitespace-nowrap">{h.parentTsumo}</td>
-                </tr>
-              </tbody>
-            </table>
-          </li>
-        ))}
-      </ul>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       <h3 className="mt-6 font-bold">積み棒</h3>
       <p className="text-muted-foreground mt-1 text-sm">
