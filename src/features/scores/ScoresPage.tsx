@@ -7,6 +7,16 @@
  *
  * 子と親をタブで切り替える案もあったが、**状態を増やさずスクロールで足りた**
  * ので採らなかった（実測は報告に記載）。
+ *
+ * 文字は **16px**（T26）。12px は卓で読めないという差し戻しを受けた。
+ * 広くなった分は**セルの縦余白**で返す（`py-1.5` → `py-1`）。
+ *
+ * 横に振ったとき列の途中で止まると、固定した符の列のすぐ右に数字の切れ端が
+ * 残って「20 0」のように読めてしまう。**列の頭でスナップ**させて防ぐ
+ * （`snap-x snap-mandatory` ＋ 各セルの `snap-start`、`scroll-pl-12` は
+ * 固定した符の列の幅 `w-12` と揃えてある）。
+ * ただし**右端まで振り切ったときだけ**は、そこにスナップ点が無いので
+ * 切れ端が残る。これは直せていない。
  */
 
 import {
@@ -24,16 +34,16 @@ function ScoreTable({ title, note, rows }: { title: string; note: string; rows: 
       <h3 className="mt-6 font-bold">{title}</h3>
       <p className="text-muted-foreground mt-1 text-xs">{note}</p>
       {/* 横スクロールはこの中だけ。ページ全体を横に動かさない */}
-      <div className="border-border mt-2 overflow-x-auto rounded-lg border">
-        <table className="w-max border-collapse text-xs tabular-nums">
+      <div className="border-border mt-2 snap-x snap-mandatory scroll-pl-12 overflow-x-auto rounded-lg border">
+        <table className="w-max border-collapse text-base tabular-nums">
           <thead>
             <tr className="border-border border-b">
               {/* 横に振ってもどの符か分かるように左端を固定する */}
-              <th className="bg-background sticky left-0 z-10 border-r border-border px-2 py-1.5 text-left font-medium">
+              <th className="bg-background sticky left-0 z-10 w-12 border-r border-border px-2 py-1 text-left font-medium">
                 符
               </th>
               {HAN_LABELS.map((h) => (
-                <th key={h} className="px-2 py-1.5 text-left font-medium">
+                <th key={h} className="snap-start px-2 py-1 text-left font-medium">
                   {h}
                 </th>
               ))}
@@ -42,11 +52,11 @@ function ScoreTable({ title, note, rows }: { title: string; note: string; rows: 
           <tbody>
             {rows.map((row) => (
               <tr key={row.fu} className="border-border border-b last:border-b-0">
-                <th className="bg-background border-border sticky left-0 z-10 border-r px-2 py-1.5 text-left font-medium">
+                <th className="bg-background border-border sticky left-0 z-10 w-12 border-r px-2 py-1 text-left font-medium">
                   {row.fu}
                 </th>
                 {row.cells.map((cell, i) => (
-                  <td key={HAN_LABELS[i]} className="px-2 py-1.5 whitespace-nowrap">
+                  <td key={HAN_LABELS[i]} className="snap-start px-2 py-1 whitespace-nowrap">
                     {cell.ron === null && cell.tsumo === null ? (
                       <span className="text-muted-foreground">—</span>
                     ) : (
@@ -93,33 +103,42 @@ export function ScoresPage() {
       </p>
 
       <h3 className="mt-6 font-bold">満貫以上</h3>
-      <p className="text-muted-foreground mt-1 text-xs">符と翻に依りません。</p>
-      <div className="border-border mt-2 overflow-x-auto rounded-lg border">
-        <table className="w-max border-collapse text-xs tabular-nums">
-          <thead>
-            <tr className="border-border border-b">
-              <th className="bg-background border-border sticky left-0 z-10 border-r px-2 py-1.5 text-left font-medium"></th>
-              <th className="px-2 py-1.5 text-left font-medium">子 ロン</th>
-              <th className="px-2 py-1.5 text-left font-medium">子 ツモ（子-親）</th>
-              <th className="px-2 py-1.5 text-left font-medium">親 ロン</th>
-              <th className="px-2 py-1.5 text-left font-medium">親 ツモ（各家）</th>
-            </tr>
-          </thead>
-          <tbody>
-            {BIG_HANDS.map((h) => (
-              <tr key={h.name} className="border-border border-b last:border-b-0">
-                <th className="bg-background border-border sticky left-0 z-10 border-r px-2 py-1.5 text-left font-medium whitespace-nowrap">
-                  {h.name}
-                </th>
-                <td className="px-2 py-1.5 whitespace-nowrap">{h.childRon}</td>
-                <td className="px-2 py-1.5 whitespace-nowrap">{h.childTsumo}</td>
-                <td className="px-2 py-1.5 whitespace-nowrap">{h.parentRon}</td>
-                <td className="px-2 py-1.5 whitespace-nowrap">{h.parentTsumo}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <p className="text-muted-foreground mt-1 text-xs">
+        符と翻に依りません。子のツモは「子から-親から」、親のツモは各家から。
+      </p>
+      {/*
+        ここは横に振らせない。役名が「三倍満（11-12翻）」と長く、16px にすると
+        固定列だけで 212px（320px 幅の残りは 74px）になって、振っても読めない。
+        1役1ブロックの縦積みなら、子と親を並べたまま 320px に収まる（実測）。
+      */}
+      <ul className="mt-2 space-y-2">
+        {BIG_HANDS.map((h) => (
+          <li key={h.name} className="border-border rounded-lg border p-3">
+            <p className="font-medium">{h.name}</p>
+            <table className="mt-1 w-full text-base tabular-nums">
+              <thead>
+                <tr className="text-muted-foreground text-xs">
+                  <th className="w-10 text-left font-normal"></th>
+                  <th className="text-left font-normal">子</th>
+                  <th className="text-left font-normal">親</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th className="text-muted-foreground text-left text-xs font-normal">ロン</th>
+                  <td className="whitespace-nowrap">{h.childRon}</td>
+                  <td className="whitespace-nowrap">{h.parentRon}</td>
+                </tr>
+                <tr>
+                  <th className="text-muted-foreground text-left text-xs font-normal">ツモ</th>
+                  <td className="whitespace-nowrap">{h.childTsumo}</td>
+                  <td className="whitespace-nowrap">{h.parentTsumo}</td>
+                </tr>
+              </tbody>
+            </table>
+          </li>
+        ))}
+      </ul>
 
       <h3 className="mt-6 font-bold">積み棒</h3>
       <p className="text-muted-foreground mt-1 text-sm">
