@@ -340,7 +340,7 @@ RLS は無くなったので、APIサーバーのミドルウェアで代替す�
 | `GET /api/leagues`<br/>`GET /api/leagues/:id` | 閲覧全般 | **誰でも可**（認証なし） |
 | `POST /api/games`<br/>`PATCH /api/games/:id`<br/>`PATCH /api/games/:id/deleted` | 半荘の登録・修正（全置換）・論理削除 | **`X-Passcode` ヘッダが `WRITE_PASSCODE` と一致した時だけ通す**（→ [APIの形](/spec/features/#apiの形)） |
 | `DELETE` | – | **エンドポイントを作らない**（論理削除のみ。事故防止） |
-| 運営系テーブル | `leagues` `teams` `members` `league_members` | **書き込みAPIを作らない**。`wrangler d1 execute` でのSQL直操作のみ |
+| 運営系テーブル | `leagues` `teams` `members` `league_members` | **`POST /api/leagues/:id/roster` だけが書く**（名前と所属のみ）。他は `wrangler d1 execute` |
 
 ```ts title="server/auth.ts"
 export const requirePasscode: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
@@ -385,7 +385,7 @@ if (c.req.header('X-Passcode') !== c.env.WRITE_PASSCODE) { ... }
 - `migrations/` に連番SQLを置き、`wrangler d1 migrations apply` が未適用分を順に流す（適用履歴は D1 が `d1_migrations` テーブルで管理）
 - 旧構成の自前ランナー（`db/migrate.ts` + `PRAGMA user_version`）は**不要になった**
 - 型は生成せず、`src/lib/types.ts` に**手書き**する（テーブル6個・カラム30個弱なので生成ツールに見合わない）。D1 が自動で作る `d1_migrations` はアプリから触らないので型を書かない
-- 初期データ（メンバー10人・リーグ・チーム・所属）は **`db/seed.local.sql`**。`db/seed.sql` はプレースホルダ名のテンプレートで、**実名を書かずにコミットする**（→ [使い方](/spec/usage/#リーグ立ち上げ運営シーズン開始時に1回)）
+- 初期データ（メンバー10人・リーグ・チーム・所属）は **`db/seed.local.sql`**。`db/seed.sql` はプレースホルダ名のテンプレートで、**実名を書かずにコミットする**（→ [使い方](/spec/usage/#リーグ立ち上げ運営シーズン開始時)）
 
 ```bash
 wrangler d1 migrations create majan init     # migrations/0001_init.sql の雛形が作られる
