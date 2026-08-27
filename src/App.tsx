@@ -18,6 +18,7 @@ import { NewGamePage } from "@/features/games/NewGamePage";
 import { MemberPage } from "@/features/members/MemberPage";
 import { AdminPage } from "@/features/admin/AdminPage";
 import { RulesPage } from "@/features/rules/RulesPage";
+import { ScoresPage } from "@/features/scores/ScoresPage";
 import { StandingsPage } from "@/features/standings/StandingsPage";
 import { LeagueProvider } from "@/components/LeagueProvider";
 import { useLeague } from "@/lib/league-context";
@@ -26,6 +27,7 @@ import { NewGameSheet } from "@/features/games/NewGameSheet";
 
 function Header() {
   const { league } = useLeague();
+  const { leagueId } = useParams();
   const [passcodeOpen, setPasscodeOpen] = useState(false);
 
   return (
@@ -35,17 +37,24 @@ function Header() {
             体験は変わらず、2つ以上になったときに切り替え導線になる。
             ここが base（そのリーグの戦績）を指していると、増えた後に
             URL を手で消すしか切り替える手段が無くなる */}
-        <Link to="/" className="font-bold">
+        {/* 長いリーグ名で折り返すとヘッダが画面の1/3を占める（60文字で 53px → 217px）。
+            1行に収めて省略する。全文は運営メニューの入力欄で見られる */}
+        <Link to="/" className="min-w-0 truncate font-bold">
           {league.name}
         </Link>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setPasscodeOpen(true)}
-          aria-label="書き込みパスコードの設定"
-        >
-          パスコード
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Link to={`/leagues/${leagueId}/scores`} className="px-2 py-1 text-sm underline">
+            点数表
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setPasscodeOpen(true)}
+            aria-label="書き込みパスコードの設定"
+          >
+            パスコード
+          </Button>
+        </div>
       </div>
       <PasscodeDialog open={passcodeOpen} onOpenChange={setPasscodeOpen} />
     </header>
@@ -282,6 +291,14 @@ export function App() {
           element={
             <LeagueLayout>
               <MemberPage />
+            </LeagueLayout>
+          }
+        />
+        <Route
+          path="/leagues/:leagueId/scores"
+          element={
+            <LeagueLayout>
+              <ScoresPage />
             </LeagueLayout>
           }
         />
