@@ -146,6 +146,9 @@ function toFailure(status: number, body: unknown): ApiFailure {
  */
 const inFlight = new Map<string, Promise<ApiResult<unknown>>>();
 
+/** GET を打ち切るまでの時間。理由は fetch の signal のところに書いてある */
+const GET_TIMEOUT_MS = 15_000;
+
 async function request<T>(
   method: "GET" | "POST" | "PATCH",
   path: string,
@@ -162,6 +165,22 @@ async function request<T>(
       method,
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      // ★ 打ち切るのは GET だけ。
+      //
+      //   読み取りは何度でもやり直せるので、返ってこない1本を捨てても害が無い。
+      //   捨てないと、モバイルでトンネルが切れて**応答が来ないまま接続が生きている**
+      //   ときに、自動更新の in-flight ガードが下りず、ポーリングが静かに止まる
+      //   （LeagueProvider のコメント参照）。
+      //
+      //   書き込みには付けない。**打ち切っても、サーバー側では通っているかもしれない**。
+      //   「失敗しました」と出して利用者がやり直すと、半荘が二重に登録されうる。
+      //   固まったままの方が、嘘の失敗より扱いやすい。
+      //
+      //   15秒にしたのは、ポーリングの間隔（30秒）より短くするため。長いと
+      //   打ち切る前に次の回が来て、復活が1周ぶん遅れる。2.5KB の応答なので
+      //   電波が悪くても15秒に届くことはまず無く、初回表示でエラー画面が出るまでの
+      //   待ち時間としても長すぎない。
+      signal: method === "GET" ? AbortSignal.timeout(GET_TIMEOUT_MS) : undefined,
     });
 
     let body: unknown = null;

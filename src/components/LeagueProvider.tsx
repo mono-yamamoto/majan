@@ -32,46 +32,75 @@ export function LeagueProvider({
    * 自動更新の間隔（30秒）より応答が遅い回線では**毎回捨てられて、
    * 画面が永遠に古いまま**になる。動いているのに反映されない、という
    * この機能で一番まずい壊れ方なので、捨てずに待つ側にした。
-   * 待っている間の要求は落とすだけでよい（次の回に拾える）。
    */
   const inFlight = useRef(false);
+  /**
+   * 取得中に来た要求を覚えておき、終わったらもう1回だけ走る。
+   *
+   * 落とすだけにすると、**ポーリングが飛んでいる最中の保存後の `reload()` が
+   * 消える**。半荘一覧は次のポーリングで治るが、**運営メニューは自動更新しない**
+   * ので「反映しました」と出たまま名簿が古いままになる
+   * （T21 で潰した「まだ追加していない」と同じ症状が、別の原因で復活する）。
+   *
+   * 真偽値1つなので、何回要求が来ても**追加で走るのは1回**。連打で積み上がらない。
+   */
+  const pending = useRef(false);
   /** アンマウント後や、別リーグへ移ったあとの応答を捨てるための目印 */
   const wanted = useRef(leagueId);
 
   const load = useCallback(() => {
-    if (inFlight.current) return;
+    if (inFlight.current) {
+      pending.current = true;
+      return;
+    }
     inFlight.current = true;
-    void fetchLeague(leagueId).then((result) => {
-      inFlight.current = false;
-      // 別のリーグに移ったあとに届いた応答は使わない
-      if (wanted.current !== leagueId) return;
-      setState((prev) => {
-        if (result.ok) {
-          // ★ 中身が同じなら状態を差し替えない。
-          //   自動更新で30秒ごとに新しいオブジェクトを入れると、参照が変わるだけで
-          //   全画面が再描画され、**グラフの線が毎回描き直される**（T19 でアニメーションを
-          //   入れたため）。スクロール位置も飛びうる。
-          //   レスポンスは 2KB 程度なので、比較のコストは無視できる。
-          if (
-            prev.status === "ready" &&
-            JSON.stringify(prev.response) === JSON.stringify(result.data)
-          ) {
-            return prev;
-          }
-          return { status: "ready", response: result.data };
+
+    // 待たせていた要求を、終わった直後に1回だけ拾う。
+    // 自分を呼ぶので、useCallback の外に名前を出さず同じスコープの中で回す
+    const run = () => {
+      void fetchLeague(leagueId).then((result) => {
+        // 別のリーグに移ったあとに届いた応答は使わない
+        if (wanted.current === leagueId) {
+          setState((prev) => {
+            if (result.ok) {
+              // ★ 中身が同じなら状態を差し替えない。
+              //   自動更新で30秒ごとに新しいオブジェクトを入れると、参照が変わるだけで
+              //   全画面が再描画され、**グラフの線が毎回描き直される**（T19 でアニメーションを
+              //   入れたため）。スクロール位置も飛びうる。
+              //   レスポンスは 2KB 程度なので、比較のコストは無視できる。
+              if (
+                prev.status === "ready" &&
+                JSON.stringify(prev.response) === JSON.stringify(result.data)
+              ) {
+                return prev;
+              }
+              return { status: "ready", response: result.data };
+            }
+            // ★ 取得に失敗しても、既に出ているデータは消さない。
+            //   電波が切れただけかもしれないので、黙って次の回に賭ける。
+            //   初回の失敗だけはエラー画面を出す（出すものが無いため）。
+            return prev.status === "ready" ? prev : { status: "error", failure: result };
+          });
         }
-        // ★ 取得に失敗しても、既に出ているデータは消さない。
-        //   電波が切れただけかもしれないので、黙って次の回に賭ける。
-        //   初回の失敗だけはエラー画面を出す（出すものが無いため）。
-        return prev.status === "ready" ? prev : { status: "error", failure: result };
+
+        if (pending.current && wanted.current === leagueId) {
+          pending.current = false;
+          run(); // inFlight は立てたまま。まだ取得中なので
+        } else {
+          pending.current = false;
+          inFlight.current = false;
+        }
       });
-    });
+    };
+
+    run();
   }, [leagueId]);
 
   useEffect(() => {
     wanted.current = leagueId;
-    // リーグが変わったら、前のリーグの取得は待たない
+    // リーグが変わったら、前のリーグの取得も、その待ち行列も捨てる
     inFlight.current = false;
+    pending.current = false;
     load();
     return () => {
       // アンマウント後の応答で setState しないよう、目印を外す
