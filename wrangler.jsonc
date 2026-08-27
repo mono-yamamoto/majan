@@ -18,6 +18,14 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"],
   },
+  // 動画（配牌の説明）の置き場。58MB あって Workers の静的アセット（25 MiB/ファイル）に
+  // 入らないので R2 に置く。バケットは運営側で作成済み（majan-media・location apac）。
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "majan-media",
+    },
+  ],
   "d1_databases": [
     {
       "binding": "DB",

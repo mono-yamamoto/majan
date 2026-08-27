@@ -107,6 +107,28 @@ export function RulesPage() {
         ]}
       />
 
+      <h3 className="mt-6 font-bold">配牌について</h3>
+      {/*
+        58MB あって Workers の静的アセット（25 MiB/ファイル）に入らないので、
+        R2 に置いて `/api/media/haipai.mp4` から配っている（Range 対応）。
+
+        - `autoplay` を付けない。3分47秒・58MB が勝手に流れ始めるのは最悪
+        - `preload="metadata"`。`auto` だと開いただけで落とし始める。
+          合宿先の電波で全員に 58MB を落とさせない
+        - `playsInline` で iOS が全画面に飛ばないようにする
+      */}
+      <p className="text-muted-foreground mt-1 text-sm">
+        約 58MB あります。<strong>Wi-Fi での再生をおすすめします。</strong>
+      </p>
+      <video
+        controls
+        playsInline
+        preload="metadata"
+        className="border-border mt-2 aspect-video w-full max-w-full rounded-lg border"
+      >
+        <source src="/api/media/haipai.mp4" type="video/mp4" />
+      </video>
+
       <p className="text-muted-foreground mt-6 text-xs">
         持ち点・返し点・ウマ・オカはリーグ設定から表示しています。ほかの項目の変更は運営まで。
       </p>

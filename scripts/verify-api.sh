@@ -111,6 +111,23 @@ seed_db() {
   W d1 execute majan --local --persist-to "$PERSIST" --file=./db/roster.sql >/dev/null 2>&1
 }
 
+# 動画の検証用ダミーを**ローカルの** R2 に置く。本物（58MB）は置かない。
+# Range の実装が正しいかは中身に依らないので、**サイズが分かる 1000 バイト**で足りる
+# （Content-Range の分母が合っているかを見るのが本題なので、半端なサイズにしない）。
+# リポジトリにバイナリを置かないよう、ここで作る。
+MEDIA_BYTES=1000
+MEDIA_FILE="${PERSIST}.dummy.mp4"
+seed_media() {
+  head -c "$MEDIA_BYTES" /dev/zero > "$MEDIA_FILE"
+  W r2 object put "majan-media/haipai.mp4" --file="$MEDIA_FILE" \
+    --content-type=video/mp4 --local --persist-to "$PERSIST" >/dev/null 2>&1
+  # **バケットに在るが配ってはいけないキー**も置く。
+  # これが無いと「許可キーの検査」を外しても、単に R2 に無いから 404 になるだけで
+  # テストが素通りする（実測で確認した）。守りたいのは「在っても配らない」方。
+  W r2 object put "majan-media/secret.txt" --file="$MEDIA_FILE" \
+    --content-type=text/plain --local --persist-to "$PERSIST" >/dev/null 2>&1
+}
+
 start_worker() { # $1: "with-secret" | "without-secret"
   stop_worker
   # --env-file を必ず渡す。省くと開発者の .dev.vars が自動で読まれてしまい、
@@ -181,6 +198,7 @@ GOOD='{"leagueId":1,"playedOn":"2026-08-26","title":"初戦","results":[{"member
 EDIT='{"playedOn":"2026-08-28","title":"修正後","results":[{"memberId":1,"rawScore":50000},{"memberId":6,"rawScore":20000},{"memberId":2,"rawScore":20000},{"memberId":7,"rawScore":10000}]}'
 
 reset_db
+seed_media
 bun run build >/dev/null 2>&1
 start_worker with-secret
 
@@ -623,6 +641,58 @@ check "dist/ にパスコード値が無い"     "$(grep -rl "${PASSCODE}" dist/
 # 秘密がバンドルに載る経路は import.meta.env 経由なので、そこを直接見る。
 check "import.meta.env を使っていない"  "$(banned_in_code 'import\.meta\.env' src/ server/)" "0"
 
+echo; echo "===== 動画（R2・Range 対応） ====="
+# ここは「動くはず」で済ませられない。Range が壊れていても**ブラウザは黙って
+# 再生しないだけ**で、エラーが出ない。シークできるかは 206 と Content-Range で決まる。
+MEDIA_URL="${BASE}/api/media/haipai.mp4"
+
+# media_case <ラベル> <期待コード> <期待 Content-Range（- なら見ない）> <期待本文バイト> [curl 追加引数...]
+media_case() {
+  local label="$1" want_code="$2" want_range="$3" want_bytes="$4"; shift 4
+  local code range bytes
+  code=$(curl -s -D "${PERSIST}.mh" -o "${PERSIST}.mb" -w '%{http_code}' "$@" "$MEDIA_URL")
+  range=$(tr -d '\r' < "${PERSIST}.mh" | awk -F': ' 'tolower($1)=="content-range"{print $2}')
+  bytes=$(wc -c < "${PERSIST}.mb" | tr -d ' ')
+  check "$label" "$code" "$want_code"
+  [ "$want_range" = "-" ] || check "$label / Content-Range" "$range" "$want_range"
+  check "$label / 本文バイト" "$bytes" "$want_bytes"
+}
+media_header() { # media_header <ヘッダ名> [curl 追加引数...]
+  local key; key=$(printf '%s' "$1" | tr 'A-Z' 'a-z'); shift
+  curl -s -D - -o /dev/null "$@" "$MEDIA_URL" | tr -d '\r' \
+    | awk -F': ' -v k="$key" 'tolower($1)==k{print $2}'
+}
+
+media_case "Range なし → 200 で全体"        200 "-" "$MEDIA_BYTES"
+check "Accept-Ranges: bytes を返す"          "$(media_header Accept-Ranges)" "bytes"
+check "Content-Type は video/mp4"            "$(media_header Content-Type)" "video/mp4"
+check "Cache-Control を返す"                 "$(media_header Cache-Control)" "public, max-age=86400"
+media_case "先頭 100 バイト → 206"          206 "bytes 0-99/${MEDIA_BYTES}"    100 -H 'Range: bytes=0-99'
+media_case "末尾 100 バイト（bytes=-100）"   206 "bytes 900-999/${MEDIA_BYTES}" 100 -H 'Range: bytes=-100'
+media_case "終端を省く（bytes=900-）"        206 "bytes 900-999/${MEDIA_BYTES}" 100 -H 'Range: bytes=900-'
+media_case "最後の1バイト"                   206 "bytes 999-999/${MEDIA_BYTES}"   1 -H 'Range: bytes=999-999'
+media_case "終端がサイズ超（990-5000）"      206 "bytes 990-999/${MEDIA_BYTES}"  10 -H 'Range: bytes=990-5000'
+# 実体の外は 416。黙って全体を返すと、クライアントが「その範囲が返った」と誤解する
+media_case "実体の外（1000-）→ 416"         416 "bytes */${MEDIA_BYTES}"          0 -H 'Range: bytes=1000-'
+media_case "逆転（500-400）→ 416"           416 "bytes */${MEDIA_BYTES}"          0 -H 'Range: bytes=500-400'
+# 解釈しない形は Range を無視して 200（RFC 7233 が許している）
+media_case "複数レンジ → 200 で全体"        200 "-" "$MEDIA_BYTES" -H 'Range: bytes=0-99,200-299'
+media_case "単位違い → 200 で全体"          200 "-" "$MEDIA_BYTES" -H 'Range: items=0-99'
+# 条件付きリクエスト（2回目以降を軽くする）
+media_etag=$(media_header ETag)
+check "ETag を返す"                          "$([ -n "$media_etag" ] && echo yes || echo no)" "yes"
+t 304 'If-None-Match が一致すれば 304' -H "If-None-Match: ${media_etag}" "$MEDIA_URL"
+t 200 'If-None-Match が違えば 200'     -H 'If-None-Match: "違う"' "$MEDIA_URL"
+# 許可したキー以外はバケットに何が入っていても配らない。
+# secret.txt は seed_media が**実際に R2 へ入れてある**。「無いから 404」ではなく
+# 「在るのに配らない」ことを見ている
+t 404 'バケットに在っても許可外なら 404' "${BASE}/api/media/secret.txt"
+t 404 '存在しないキーも 404' "${BASE}/api/media/other.mp4"
+t 404 '許可していないキーは 404（パス風）' "${BASE}/api/media/..%2Fsecret"
+# 書き込みの経路を作っていないこと
+t 404 '動画に PUT は無い' -X PUT "$MEDIA_URL"
+t 404 '動画に DELETE は無い' -X DELETE "$MEDIA_URL"
+
 echo; echo "===== 静的チェック（Blocker） ====="
 check "last_insert_rowid を使っていない" "$(banned_in_code 'last_insert_rowid' server/)" "0"
 check "DELETE エンドポイントが無い"      "$(banned_in_code '\.delete\(' server/)" "0"
@@ -636,6 +706,8 @@ check "roster.ts は members を消さない（論理削除でも物理削除で
   "$(banned_in_code 'DELETE FROM *members' server/routes/roster.ts)" "0"
 check "roster.ts は game_results に触らない" \
   "$(banned_in_code 'game_results' server/routes/roster.ts)" "0"
+# 動画のルートは読み取り専用。R2 に書ける口を作らない
+check "media.ts は R2 に書かない"        "$(banned_in_code '(MEDIA\.(put|delete)|\.createMultipartUpload)' server/)" "0"
 check "100000 のハードコードが無い"      "$(banned_in_code '100000|100_000' server/ src/lib/api.ts src/lib/scoring.ts src/lib/validation.ts src/lib/types.ts)" "0"
 
 echo
