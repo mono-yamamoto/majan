@@ -377,6 +377,89 @@ WHERE lm.league_id = 1 GROUP BY t.id;
 
 「もう `roster.local.sql` は流さない」と決めるなら、そのままでも問題ない。
 
+## ★ 開幕前にテストデータを消す
+
+**動作確認で入れた半荘を、本番の開始前に片付ける手順。** リーグ名・チーム・名簿・ルール・パスコードは**残したまま**、半荘のデータだけを消す。
+
+<Aside type="danger" title="消したものは戻らない">
+`DELETE` は論理削除（`deleted_at`）ではなく**本当に消す**。アプリの「削除」と違って**画面から戻す手段は無い**。
+
+**必ず手順1のバックアップを取ってから。** 消したあとに「あれも見たかった」となっても、バックアップが無ければ終わり。
+</Aside>
+
+### 1. バックアップを取る（必須）
+
+```bash
+wrangler d1 export majan --remote --output=majan-before-reset.sql
+```
+**成功して、ファイルに中身があることを目で見る**こと。
+
+```bash
+ls -l majan-before-reset.sql
+grep -c "INSERT INTO" majan-before-reset.sql
+```
+
+<Aside type="caution" title="このファイルには実名が入る">
+`members` の中身がそのまま入っているので、**リポジトリに置かない**。`db/` の下にも置かない（`.gitignore` は `seed.local.sql` と `roster.local.sql` しか除外していない）。
+
+**リポジトリの外**（ホームディレクトリなど）に置き、片付けが済んだら消す。
+</Aside>
+
+### 2. 消す前の件数を見る
+
+```bash
+wrangler d1 execute majan --remote --command "SELECT (SELECT COUNT(*) FROM games) AS games, (SELECT COUNT(*) FROM game_results) AS results, (SELECT COUNT(*) FROM members) AS members;"
+```
+
+**`games` の件数は、アプリの半荘一覧より多いことがある。** 一覧に出ないのは `deleted_at` が入った行（アプリから削除したもの）で、**行そのものは残っている**。リセットではそれも消える。
+
+### 3. 消す
+
+```bash
+wrangler d1 execute majan --remote --file=db/reset-games.sql
+```
+
+中身は2行だけ。
+
+```sql
+DELETE FROM game_results;
+DELETE FROM games;
+```
+
+**順番を変えないこと。** `game_results` が `games` を外部キーで参照しているので、**子から**消す。逆にすると `FOREIGN KEY constraint failed` で落ちる（落ちるだけで壊れはしない）。
+
+### 4. 確かめる
+
+```bash
+wrangler d1 execute majan --remote --command "SELECT (SELECT COUNT(*) FROM games) AS games, (SELECT COUNT(*) FROM game_results) AS results, (SELECT COUNT(*) FROM members) AS members, (SELECT COUNT(*) FROM league_members) AS roster, (SELECT name FROM leagues WHERE id = 1) AS league;"
+```
+
+| 見るもの | 期待 |
+|---|---|
+| `games` / `results` | **0 / 0** |
+| `members` / `roster` | **消す前と同じ**（名簿は残る） |
+| `league` | **リーグ名がそのまま** |
+
+**アプリを開いて**、戦績が「まだ半荘がありません」、半荘一覧が空、運営メニューの名簿が10人そろっていることも見る。
+
+### 5. 半荘を1件入れて、消す
+
+**空になったことより、「ここから正しく積める」ことの方が大事。**
+
+アプリから1件登録して、戦績とチーム合計に出ることを確認 → その半荘をアプリから削除する。**これで開幕の状態になる。**
+
+<Aside type="note" title="id は 1 から振り直される">
+`games.id` は `INTEGER PRIMARY KEY`（`AUTOINCREMENT` ではない）なので、**全行消すと次の登録が `id=1`** になる。開幕前に片付ける用途としてはこれでよい。
+
+`AUTOINCREMENT` を使っていないのは、**削除した id を二度と使わない必要が無い**ため。半荘は URL で共有するものではなく、消えた id を誰かが持っていることもない。
+</Aside>
+
+<Aside type="caution" title="「テストのぶんだけ」を選んで消さない">
+`db/reset-games.sql` に `WHERE` は付けていない。日付や id で選ぶと、**選び漏れ・選びすぎ**が起きる。開幕前に全部消す用途なので、**全消しの方が結果が読める**。
+
+一部だけ残したいなら、このファイルは使わず手で `DELETE` を書く。そのときも**先に `SELECT` で対象を目で見てから**。
+</Aside>
+
 ## 間違えたとき
 
 - 半荘一覧から該当行を開いて **編集** で素点を直す（パスコード必要）
