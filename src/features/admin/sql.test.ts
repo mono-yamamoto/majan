@@ -133,6 +133,38 @@ describe("diffRoster", () => {
     ]);
   });
 
+  it("★ 改名しつつ外すと、remove の name は編集後の名前（警告が古い名前を名乗らない）", () => {
+    const edited = asEdited(CURRENT);
+    edited[0]!.name = "山田太郎";
+    edited[0]!.teamId = null;
+    expect(diffRoster(CURRENT, edited, [])).toEqual([
+      { kind: "rename", memberId: 1, before: "山田", after: "山田太郎" },
+      { kind: "remove", memberId: 1, name: "山田太郎", teamId: 1 },
+    ]);
+  });
+
+  it("改名しつつチームを変えても、team の name は編集後の名前", () => {
+    const edited = asEdited(CURRENT);
+    edited[0]!.name = "山田太郎";
+    edited[0]!.teamId = 2;
+    expect(diffRoster(CURRENT, edited, [])[1]).toEqual({
+      kind: "team",
+      memberId: 1,
+      name: "山田太郎",
+      before: 1,
+      after: 2,
+    });
+  });
+
+  it("名前欄が空なら DB の名前に戻す（改名を出さないので、流したあともその名前）", () => {
+    const edited = asEdited(CURRENT);
+    edited[0]!.name = "";
+    edited[0]!.teamId = null;
+    expect(diffRoster(CURRENT, edited, [])).toEqual([
+      { kind: "remove", memberId: 1, name: "山田", teamId: 1 },
+    ]);
+  });
+
   it("所属を外すのは remove（team の変更としては出さない）", () => {
     const edited = asEdited(CURRENT);
     edited[0]!.teamId = null;

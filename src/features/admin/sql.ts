@@ -98,6 +98,13 @@ export type Change =
   | { kind: "leagueName"; before: string; after: string }
   | { kind: "teamName"; teamId: number; before: string; after: string }
   | { kind: "rename"; memberId: number; before: string; after: string }
+  /**
+   * `team` と `remove` の `name` は**画面の入力欄に見えている名前**。
+   * 同じ編集で改名と所属変更を同時にすると、DB 側の名前で警告を出すと
+   * 「入力欄には新しい名前が見えているのに、警告は古い名前を名乗る」ことになる。
+   * 名前欄が空（＝改名を出さない）のときは DB の名前に戻す。
+   * その場合は SQL を流したあとも DB の名前のままなので、それが正しい。
+   */
   | { kind: "team"; memberId: number; name: string; before: number; after: number }
   | { kind: "remove"; memberId: number; name: string; teamId: number }
   | { kind: "add"; memberId: number; name: string; teamId: number };
@@ -125,13 +132,15 @@ export function diffRoster(current: RosterRow[], edited: EditedRow[], added: New
     if (after !== "" && after !== row.name) {
       changes.push({ kind: "rename", memberId: row.memberId, before: row.name, after });
     }
+    // 警告や注記に出す名前。入力欄に見えているものを使う
+    const shown = after === "" ? row.name : after;
     if (next.teamId === null) {
-      changes.push({ kind: "remove", memberId: row.memberId, name: row.name, teamId: row.teamId });
+      changes.push({ kind: "remove", memberId: row.memberId, name: shown, teamId: row.teamId });
     } else if (next.teamId !== row.teamId) {
       changes.push({
         kind: "team",
         memberId: row.memberId,
-        name: row.name,
+        name: shown,
         before: row.teamId,
         after: next.teamId,
       });
