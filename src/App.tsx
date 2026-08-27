@@ -15,8 +15,6 @@ import { useLeague } from "@/lib/league-context";
 
 function Header() {
   const { league } = useLeague();
-  const { leagueId } = useParams();
-  const base = `/leagues/${leagueId}`;
   const [passcodeOpen, setPasscodeOpen] = useState(false);
 
   return (
@@ -38,11 +36,36 @@ function Header() {
           パスコード
         </Button>
       </div>
-      {/* 「登録」だけ性質が違う（他は閲覧、登録は書き込み）ので、同列に並べず
-          右端のボタンにする。リンク側は min-w-0 で縮ませ、ボタンは shrink-0 で
-          潰さない。390px でナビ3つ + ボタンが1行に収まることを実機で確認済み */}
-      <div className="mx-auto flex max-w-screen-sm items-center justify-between gap-3 px-4 pb-2">
-        <nav className="flex min-w-0 gap-4 overflow-x-auto text-sm">
+      <PasscodeDialog open={passcodeOpen} onOpenChange={setPasscodeOpen} />
+    </header>
+  );
+}
+
+/** 下端のバーの高さ。main の padding-bottom と合わせるので1か所で持つ */
+const NAV_HEIGHT = "3.5rem";
+
+/**
+ * 画面下部に固定するナビ。スマホでは上端より親指が届きやすい。
+ *
+ * - 下スクロールで隠さない。常に出ている方が単純で、10人が時々使うアプリで
+ *   画面を数十 px 広げる価値より、いつでも押せることの方が大きい。
+ * - 「登録」だけ性質が違う（他は閲覧、登録は書き込み）ので、同列に並べず
+ *   右端のボタンにする。右端は下バーの中でいちばん親指が届く位置でもある。
+ * - `pb-[env(safe-area-inset-bottom)]` で iPhone のホームインジケータを避ける。
+ *   高さではなく padding に入れているので、バーの背景は画面の下端まで伸びる。
+ * - `100vh` / `h-screen` は使わない（iOS Safari でアドレスバーの分ずれる）。
+ */
+function BottomNav() {
+  const { leagueId } = useParams();
+  const base = `/leagues/${leagueId}`;
+
+  return (
+    <nav className="border-border bg-background fixed inset-x-0 bottom-0 z-20 border-t pb-[env(safe-area-inset-bottom)]">
+      <div
+        className="mx-auto flex max-w-screen-sm items-center justify-between gap-3 px-4"
+        style={{ height: NAV_HEIGHT }}
+      >
+        <div className="flex min-w-0 gap-4 overflow-x-auto text-sm">
           <Link to={base} className="shrink-0">
             戦績
           </Link>
@@ -52,16 +75,15 @@ function Header() {
           <Link to={`${base}/rules`} className="shrink-0">
             ルール
           </Link>
-        </nav>
+        </div>
         <Link
           to={`${base}/games/new`}
-          className="bg-primary text-primary-foreground hover:bg-primary/80 shrink-0 rounded-lg px-3 py-1 text-sm font-medium"
+          className="bg-primary text-primary-foreground hover:bg-primary/80 shrink-0 rounded-lg px-4 py-2 text-sm font-medium"
         >
           登録
         </Link>
       </div>
-      <PasscodeDialog open={passcodeOpen} onOpenChange={setPasscodeOpen} />
-    </header>
+    </nav>
   );
 }
 
@@ -76,7 +98,15 @@ function LeagueLayout({ children }: { children: React.ReactNode }) {
   return (
     <LeagueProvider leagueId={id}>
       <Header />
-      <main className="mx-auto max-w-screen-sm p-4">{children}</main>
+      {/* 下固定のバーに隠れないよう、バーの高さ + セーフエリア + 余白ぶん空ける。
+          これが足りないと、登録画面の「保存」ボタンがバーの裏に入って押せなくなる */}
+      <main
+        className="mx-auto max-w-screen-sm p-4"
+        style={{ paddingBottom: `calc(${NAV_HEIGHT} + 1.5rem + env(safe-area-inset-bottom))` }}
+      >
+        {children}
+      </main>
+      <BottomNav />
     </LeagueProvider>
   );
 }
