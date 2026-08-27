@@ -103,7 +103,7 @@ function NavItem({
  *   高さではなく padding に入れているので、バーの背景は画面の下端まで伸びる。
  * - `100vh` / `h-screen` は使わない（iOS Safari でアドレスバーの分ずれる）。
  */
-function BottomNav({ onOpenNew }: { onOpenNew: () => void }) {
+function BottomNav({ onOpenNew }: { onOpenNew: (() => void) | null }) {
   const { leagueId } = useParams();
   const { pathname } = useLocation();
   const base = `/leagues/${leagueId}`;
@@ -151,14 +151,20 @@ function BottomNav({ onOpenNew }: { onOpenNew: () => void }) {
         </div>
         <div className="flex justify-end">
           {/* 遷移ではなくシートを開く。ルート（/games/new）は残してあるので、
-              ブックマークや戦績の「半荘を登録する」リンクはそのまま生きる */}
-          <button
-            type="button"
-            onClick={onOpenNew}
-            className="bg-primary text-primary-foreground hover:bg-primary/80 shrink-0 rounded-lg px-4 py-2 text-sm font-medium"
-          >
-            登録
-          </button>
+              ブックマークや戦績の「半荘を登録する」リンクはそのまま生きる。
+
+              ただし /games/new を開いているときは出さない。同じフォームが
+              2つ並ぶことになり、どちらに入力しているのか分からなくなる。
+              その画面には既に登録フォームがあるので、導線としても要らない */}
+          {onOpenNew === null ? null : (
+            <button
+              type="button"
+              onClick={onOpenNew}
+              className="bg-primary text-primary-foreground hover:bg-primary/80 shrink-0 rounded-lg px-4 py-2 text-sm font-medium"
+            >
+              登録
+            </button>
+          )}
         </div>
       </div>
     </nav>
@@ -199,9 +205,15 @@ function LeagueShell({ children }: { children: React.ReactNode }) {
    * 「下の画面を残したまま URL だけ変える」仕組みは要らない。
    */
   const newOpen = (location.state as { newGame?: boolean } | null)?.newGame === true;
+  // 登録ページを開いているか。そこではシートを開かせない
+  const onNewPage = location.pathname.endsWith("/games/new");
   const setNewOpen = useCallback(
     (open: boolean) => {
       if (open) {
+        // 既に開いているなら積まない。二重に積むと、保存後に戻ったときに
+        // 空のシートが開き直る（実操作ではオーバーレイが止めるので入り口は無いが、
+        // 1行で塞げるので塞いでおく）
+        if (newOpen) return;
         void navigate(location.pathname + location.search, { state: { newGame: true } });
       } else if (newOpen) {
         void navigate(-1);
@@ -222,7 +234,7 @@ function LeagueShell({ children }: { children: React.ReactNode }) {
       >
         {children}
       </main>
-      <BottomNav onOpenNew={() => setNewOpen(true)} />
+      <BottomNav onOpenNew={onNewPage ? null : () => setNewOpen(true)} />
       <NewGameSheet open={newOpen} onOpenChange={setNewOpen} />
     </NewGameSheetContext>
   );

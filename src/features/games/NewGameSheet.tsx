@@ -42,6 +42,24 @@ export function NewGameSheet({
     return () => reload();
   }, [open, reload]);
 
+  /**
+   * 開くたびにフォームを作り直すための番号。
+   *
+   * `useWriteAction` は**成功しても `pending` を戻さない**（遷移するので
+   * 二重登録が起きない、という設計）。ページは遷移で unmount されるので
+   * 成立するが、**このシートは常駐**していて、`pending` が下りるのは
+   * 「閉じたら Base UI が中身を unmount してくれる」ことに乗っている。
+   *
+   * つまり **`pending` を下ろす責任がこのコードの外にある**。実際、
+   * unmount しない環境では**1件目のあと保存ボタンが押せないまま**になり、
+   * 2件目が登録できなかった（レビューで実測された）。
+   * 合宿は半荘ごとに登録するので、2卓目が登録できないと作業が止まる。
+   *
+   * key を変えて自分で作り直せば、ライブラリの unmount のタイミングに
+   * 依らなくなる。`useWriteAction` 側の設計（成功後に戻さない）は
+   * 遷移する画面では正しいので、そちらに穴を開けない。
+   */
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto">
@@ -54,7 +72,9 @@ export function NewGameSheet({
           足さないと iPhone のホームインジケータと保存ボタンが重なる。
         */}
         <div className="px-4" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}>
-          <NewGameForm />
+          {/* 開いている間だけ描く。閉じたら必ず消えるので、
+              ライブラリが中身を残す作りに変わっても pending が持ち越されない */}
+          {open ? <NewGameForm /> : null}
         </div>
       </SheetContent>
     </Sheet>
