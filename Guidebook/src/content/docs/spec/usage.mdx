@@ -403,19 +403,42 @@ WHERE lm.league_id = 1 GROUP BY t.id;
 ### 1. バックアップを取る（必須）
 
 ```bash
-npx wrangler d1 export majan --remote --output=majan-before-reset.sql
+bash scripts/backup-games.sh
 ```
-**成功して、ファイルに中身があることを目で見る**こと。
+
+`~/majan-games-backup-YYYYMMDD-HHMMSS.sql` に、**流し直せる `INSERT` 文**として書き出す。最後に **DB の件数と書き出した件数が一致するか**を確かめ、食い違ったら失敗で止まる。
+
+```
+書き出し: /Users/xxx/majan-games-backup-20260827-181500.sql
+  games        13 件
+  game_results 52 件
+  DB 上の件数   13/52
+  ★ 一致
+```
+
+戻すときは、そのファイルをそのまま流す。
 
 ```bash
-ls -l majan-before-reset.sql
-grep -c "INSERT INTO" majan-before-reset.sql
+npx wrangler d1 execute majan --remote --file=~/majan-games-backup-20260827-181500.sql
 ```
 
-<Aside type="caution" title="このファイルには実名が入る">
-`members` の中身がそのまま入っているので、**リポジトリに置かない**。`db/` の下にも置かない（`.gitignore` は `seed.local.sql` と `roster.local.sql` しか除外していない）。
+<Aside type="caution" title="`wrangler d1 export` は使えない">
+本来はこれで丸ごと書き出せるはずだが、**`wrangler login` の OAuth トークンでは D1 の export API が落ちる**。
 
-**リポジトリの外**（ホームディレクトリなど）に置き、片付けが済んだら消す。
+```
+npx wrangler d1 export majan --remote --output=backup.sql
+→ Authentication error [code: 10000]
+```
+
+**`d1 (write)` 権限も Super Administrator も付いていても落ちる。** `d1 execute` は同じトークンで通るので、権限の問題ではなく **export のエンドポイントが OAuth トークンを受け付けない**という話。
+
+API トークンを別に作れば `export` も使えるが、**リセットで消すのは `games` と `game_results` だけ**なので、その2つを `INSERT` 文にしておけば足りる。**トークンを増やさない方を選んだ。**
+</Aside>
+
+<Aside type="note" title="このバックアップに実名は入らない">
+書き出すのは `games` と `game_results` だけ。**`members` は書き出さない**（リセットで消さないので、バックアップする必要がない）。`game_results` が持つのは `member_id` だけ。
+
+**丸ごと export した場合は実名が入る**ので、そのときはリポジトリの外に置くこと。
 </Aside>
 
 ### 2. 消す前の件数を見る
