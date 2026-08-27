@@ -97,3 +97,46 @@ export function toSeries(
     }),
   };
 }
+
+/**
+ * ツールチップの見出しに出すタイトルの上限。これを超えたら詰める。
+ * 390px でツールチップが画面からはみ出さない長さ（実測して決めた）。
+ */
+export const TOOLTIP_TITLE_MAX = 14;
+
+/**
+ * x 軸の目盛りに出す文字。**同じ日が続いたら2つ目以降は空**にする。
+ *
+ * XAxis のキーを x（半荘の通し番号）にしたことで、同じ日の半荘が
+ * カテゴリ軸で畳まれなくなった代わりに、「09-01 09-01 09-01」と
+ * 同じラベルが並ぶようになったため。どの点がどの日かは最初の1つで分かり、
+ * どの半荘かはツールチップで見る。
+ *
+ * 隣（x - 1）と比べるだけで済むのは、x の昇順が日付の昇順になっているから
+ * （computeStats が byPlayedOnThenId で並べてから scoredGameIds を作る）。
+ */
+export function tickLabel(axis: ChartAxis, x: number): string {
+  const at = new Map(axis.map((a) => [a.x, a]));
+  const a = at.get(x);
+  if (a === undefined) return String(x);
+  const prev = at.get(x - 1);
+  return prev !== undefined && prev.label === a.label ? "" : a.label.slice(5);
+}
+
+/**
+ * ツールチップの見出し。「月日 + タイトル」。
+ *
+ * x（通し番号）だけだと「3」と出て何の半荘か分からず、日付だけだと
+ * 同じ日の半荘を見分けられない。T14 でタイトルを必須にしたので、
+ * 同じ日に3件あっても見分けられる。
+ *
+ * 長いタイトルはツールチップが 390px からはみ出すので詰める。
+ */
+export function tooltipHeading(axis: ChartAxis, x: number): string {
+  const a = axis.find((v) => v.x === x);
+  if (a === undefined) return String(x);
+  const date = a.label.slice(5);
+  const title = a.title?.trim() ?? "";
+  const short = title.length > TOOLTIP_TITLE_MAX ? `${title.slice(0, TOOLTIP_TITLE_MAX)}…` : title;
+  return short === "" ? date : `${date} ${short}`;
+}

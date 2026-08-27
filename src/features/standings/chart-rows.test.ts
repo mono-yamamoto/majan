@@ -2,8 +2,11 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   buildAxis,
   buildGameOrder,
+  tickLabel,
   toRows,
   toSeries,
+  tooltipHeading,
+  TOOLTIP_TITLE_MAX,
   type ChartAxis,
   type ChartSeries,
 } from "./chart-rows";
@@ -95,9 +98,15 @@ describe("toRows / 累計の持ち越し", () => {
 /**
  * 同じ日に複数の半荘があるケース。
  *
- * ここが無かったので、**XAxis のキーが label（日付）のままでも
- * テストが通っていた**。実際には同じ日の半荘がカテゴリ軸で1つに畳まれ、
- * 2件目以降のツールチップを出せなかった（実測で再現）。
+ * ★ **このブロックは「同じ日が畳まれる」バグを守っていない。**
+ *   バグは `chart-rows.ts` ではなく `CumulativeChart.tsx` の
+ *   `XAxis dataKey` にあった。x は元から一意だったので、
+ *   `dataKey="label"` に戻してもここは全部通る（変異で確認済み）。
+ *
+ *   ここが固定しているのは「**x が一意であること**」で、それ自体には意味がある
+ *   （x が重複するようになったら Recharts はまた畳む）。ただし
+ *   **`dataKey` そのものを守るテストは無い**。描画のテストが要るため。
+ *   軸を触るときは、同じ日に2件以上ある状態を実際に開いて確かめること。
  */
 describe("buildGameOrder / 同じ日に複数の半荘", () => {
   const games = [
@@ -155,5 +164,91 @@ describe("buildGameOrder / 同じ日に複数の半荘", () => {
       { x: 2, totalPt: 20 },
       { x: 3, totalPt: 30 },
     ]);
+  });
+});
+
+/**
+ * 目盛りとツールチップの見出し。**バグの直し方そのもの**をここで固定する。
+ *
+ * `CumulativeChart` から切り出したのは、切り出さないと
+ * 「同じ日が2つ並ぶ」「タイトルが出る」「長いタイトルが詰まる」の
+ * どれもテストできなかったため。
+ */
+describe("tickLabel / 同じ日の目盛りを繰り返さない", () => {
+  const axis: ChartAxis = [
+    { x: 1, label: "2026-09-01", title: "朝の部" },
+    { x: 2, label: "2026-09-01", title: "昼の部" },
+    { x: 3, label: "2026-09-01", title: null },
+    { x: 4, label: "2026-09-02", title: "翌日" },
+  ];
+
+  it("★ 同じ日が続いたら2つ目以降は空", () => {
+    expect(axis.map((a) => tickLabel(axis, a.x))).toEqual(["09-01", "", "", "09-02"]);
+  });
+
+  it("日付が変わったらまた出る", () => {
+    const mixed: ChartAxis = [
+      { x: 1, label: "2026-09-01", title: null },
+      { x: 2, label: "2026-09-02", title: null },
+      { x: 3, label: "2026-09-02", title: null },
+      { x: 4, label: "2026-09-03", title: null },
+    ];
+    expect(mixed.map((a) => tickLabel(mixed, a.x))).toEqual(["09-01", "09-02", "", "09-03"]);
+  });
+
+  it("先頭は必ず出る", () => {
+    expect(tickLabel(axis, 1)).toBe("09-01");
+  });
+
+  it("軸に無い x は数字のまま（落ちない）", () => {
+    expect(tickLabel(axis, 99)).toBe("99");
+  });
+
+  it("1件だけの軸でも出る", () => {
+    const one: ChartAxis = [{ x: 1, label: "2026-09-01", title: "唯一" }];
+    expect(tickLabel(one, 1)).toBe("09-01");
+  });
+});
+
+describe("tooltipHeading / 同じ日の半荘を見分ける", () => {
+  const axis: ChartAxis = [
+    { x: 1, label: "2026-09-01", title: "朝の部" },
+    { x: 2, label: "2026-09-01", title: "昼の部" },
+    { x: 3, label: "2026-09-01", title: null },
+    { x: 4, label: "2026-09-02", title: "  前後に空白  " },
+  ];
+
+  it("★ 同じ日でも見出しが別々になる（これが直したかったこと）", () => {
+    expect(axis.map((a) => tooltipHeading(axis, a.x))).toEqual([
+      "09-01 朝の部",
+      "09-01 昼の部",
+      "09-01",
+      "09-02 前後に空白",
+    ]);
+  });
+
+  it("タイトルが無ければ日付だけ", () => {
+    expect(tooltipHeading(axis, 3)).toBe("09-01");
+  });
+
+  it("空白だけのタイトルも日付だけ", () => {
+    const a: ChartAxis = [{ x: 1, label: "2026-09-01", title: "   " }];
+    expect(tooltipHeading(a, 1)).toBe("09-01");
+  });
+
+  it(`★ ${TOOLTIP_TITLE_MAX} 文字を超えたら詰める（390px ではみ出さない長さ）`, () => {
+    const long = "あ".repeat(60);
+    const a: ChartAxis = [{ x: 1, label: "2026-09-01", title: long }];
+    expect(tooltipHeading(a, 1)).toBe(`09-01 ${"あ".repeat(TOOLTIP_TITLE_MAX)}…`);
+  });
+
+  it(`ちょうど ${TOOLTIP_TITLE_MAX} 文字は詰めない（境界）`, () => {
+    const just = "い".repeat(TOOLTIP_TITLE_MAX);
+    const a: ChartAxis = [{ x: 1, label: "2026-09-01", title: just }];
+    expect(tooltipHeading(a, 1)).toBe(`09-01 ${just}`);
+  });
+
+  it("軸に無い x は数字のまま（落ちない）", () => {
+    expect(tooltipHeading(axis, 99)).toBe("99");
   });
 });

@@ -18,7 +18,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { toRows, type ChartAxis, type ChartSeries } from "./chart-rows";
+import { tickLabel, tooltipHeading, toRows, type ChartAxis, type ChartSeries } from "./chart-rows";
 
 /**
  * 個人モードは名簿の10人に加えて名簿外のメンバーが混じりうるので、
@@ -48,40 +48,6 @@ export default function CumulativeChart({
 }) {
   const rows = toRows(series, axis);
 
-  /**
-   * x（半荘の通し番号）→ その半荘の日付とタイトル。
-   *
-   * XAxis の dataKey を label（日付）にしていたため、**同じ日の半荘が
-   * カテゴリ軸で1つに畳まれ、2件目以降のツールチップが出せなかった**
-   * （09-01 に3半荘あっても、どこをなぞっても1件目の値しか出ない）。
-   * x は一意なので、こちらをキーにして、表示だけ引き直す。
-   */
-  const at = new Map(axis.map((a) => [a.x, a]));
-
-  /**
-   * 目盛りの日付。**同じ日が続いたら2つ目以降は空**にする。
-   * x をキーにしたことで同じ日の半荘が畳まれなくなり、その代わりに
-   * 「09-01 09-01 09-01」と同じラベルが並ぶようになったため。
-   * どの点がどの日かは最初の1つで分かるし、正確な半荘はツールチップで見る。
-   */
-  const tickOf = (x: number) => {
-    const a = at.get(x);
-    if (a === undefined) return String(x);
-    const prev = at.get(x - 1);
-    return prev !== undefined && prev.label === a.label ? "" : a.label.slice(5);
-  };
-
-  /** ツールチップの見出し。日付だけだと同じ日の半荘を見分けられない */
-  const headingOf = (x: number) => {
-    const a = at.get(x);
-    if (a === undefined) return String(x);
-    const date = a.label.slice(5);
-    const title = a.title?.trim() ?? "";
-    // 長いタイトルはツールチップが 390px からはみ出すので詰める
-    const short = title.length > 14 ? `${title.slice(0, 14)}…` : title;
-    return short === "" ? date : `${date} ${short}`;
-  };
-
   return (
     <div className="mt-4">
       <ResponsiveContainer width="100%" height={260}>
@@ -94,7 +60,7 @@ export default function CumulativeChart({
             type="number"
             domain={["dataMin", "dataMax"]}
             ticks={axis.map((a) => a.x)}
-            tickFormatter={(v: number) => tickOf(v)}
+            tickFormatter={(v: number) => tickLabel(axis, v)}
             tick={{ fontSize: 10 }}
             minTickGap={16}
           />
@@ -104,7 +70,7 @@ export default function CumulativeChart({
             formatter={(value) =>
               typeof value === "number" ? `${value > 0 ? "+" : ""}${value.toFixed(1)}pt` : value
             }
-            labelFormatter={(v: unknown) => (typeof v === "number" ? headingOf(v) : "")}
+            labelFormatter={(v: unknown) => (typeof v === "number" ? tooltipHeading(axis, v) : "")}
             contentStyle={{ fontSize: 12 }}
           />
           {series.map((s, i) => (

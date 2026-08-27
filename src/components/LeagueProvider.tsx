@@ -5,7 +5,7 @@
  * （決定#14）、画面ごとに取り直さない。集計はすべてこのデータからフロントで行う。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { fetchLeague, type ApiFailure, type LeagueResponse } from "@/lib/api";
 import { LeagueContext, describeFailure, type LeagueData } from "@/lib/league-context";
@@ -24,12 +24,27 @@ export function LeagueProvider({
   children: React.ReactNode;
 }) {
   const [state, setState] = useState<State>({ status: "loading" });
-  const [nonce, setNonce] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
+  /**
+   * 取得中かどうか。**前の取得が終わるまで次を出さない。**
+   *
+   * 以前は再取得のたびに前の fetch を「捨てる」形にしていたが、
+   * 自動更新の間隔（30秒）より応答が遅い回線では**毎回捨てられて、
+   * 画面が永遠に古いまま**になる。動いているのに反映されない、という
+   * この機能で一番まずい壊れ方なので、捨てずに待つ側にした。
+   * 待っている間の要求は落とすだけでよい（次の回に拾える）。
+   */
+  const inFlight = useRef(false);
+  /** アンマウント後や、別リーグへ移ったあとの応答を捨てるための目印 */
+  const wanted = useRef(leagueId);
+
+  const load = useCallback(() => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     void fetchLeague(leagueId).then((result) => {
-      if (cancelled) return;
+      inFlight.current = false;
+      // 別のリーグに移ったあとに届いた応答は使わない
+      if (wanted.current !== leagueId) return;
       setState((prev) => {
         if (result.ok) {
           // ★ 中身が同じなら状態を差し替えない。
@@ -51,12 +66,20 @@ export function LeagueProvider({
         return prev.status === "ready" ? prev : { status: "error", failure: result };
       });
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [leagueId, nonce]);
+  }, [leagueId]);
 
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  useEffect(() => {
+    wanted.current = leagueId;
+    // リーグが変わったら、前のリーグの取得は待たない
+    inFlight.current = false;
+    load();
+    return () => {
+      // アンマウント後の応答で setState しないよう、目印を外す
+      wanted.current = -1;
+    };
+  }, [leagueId, load]);
+
+  const reload = load;
 
   const value = useMemo<LeagueData | null>(() => {
     if (state.status !== "ready") return null;

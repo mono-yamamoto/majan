@@ -27,14 +27,31 @@
  * グラフの再生も起きない（そちらのコメント参照）。
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 /** 取り直す間隔。半荘が終わって登録されるまで（数十分）に対して十分細かい */
 export const REFRESH_INTERVAL_MS = 30_000;
 
 export function useAutoRefresh(reload: () => void): void {
+  const lastAt = useRef(0);
+
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null;
+
+    /**
+     * 続けて来た要求をまとめる。
+     *
+     * タブに戻ると `visibilitychange` と `focus` が**続けて来る**ので、
+     * そのままだと2回取りに行く。`focus` 側を消さないのは、デスクトップで
+     * 別アプリから戻ったときに `visibilitychange` が出ない（`visible` のまま）
+     * ことがあり、そこを拾えなくなるため。
+     */
+    const refreshOnce = () => {
+      const now = Date.now();
+      if (now - lastAt.current < 1000) return;
+      lastAt.current = now;
+      reload();
+    };
 
     const stop = () => {
       if (timer !== null) {
@@ -45,13 +62,13 @@ export function useAutoRefresh(reload: () => void): void {
 
     const start = () => {
       stop();
-      timer = setInterval(reload, REFRESH_INTERVAL_MS);
+      timer = setInterval(refreshOnce, REFRESH_INTERVAL_MS);
     };
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         // 見えた瞬間に1回。間隔を待たせない
-        reload();
+        refreshOnce();
         start();
       } else {
         stop();
