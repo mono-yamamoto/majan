@@ -1,25 +1,19 @@
 /**
- * チームの色を選ぶ欄。**選んだ瞬間に見え方を出す。**
+ * チームの色を選ぶ欄。**選んだ瞬間に、実際に使われる2つの見え方を出す。**
  *
- * 「保存してから戦績を見に行ったら文字が読めなかった」を作らないために、
- * ここで**実際に敷いたときと同じ組み合わせ**（背景＝選んだ色、文字色＝自動）を
- * 見せる。文字色は明るさから決まるので、選ぶ側が意識しなくてよい。
+ * ★ 選んだ色そのものは、もう画面のどこにも出ない（T32）。名前の背景には
+ * 薄くした色が、グラフの線には濃くした色が使われる。**ここで「選んだ色の
+ * ベタ塗り」を見せると、画面に無い色を見せることになる**ので出さない。
  *
- * **背景としての読みにくさは警告しない。** 文字色を明るさから自動で選ぶ限り、
- * どんな背景でもコントラストは 4.58:1 を下回らないため（→ `CONTRAST_FLOOR`）、
- * 書いても絶対に出ない。出ない警告があると「警告が出ていないから安全」という
- * 誤解の余地を残す。
- *
- * **一方、線としては警告する。** 同じ色が累計pt推移のグラフの線にも使われるが、
- * 線は 2px の細さでほぼ白の上に引かれるので、**明るい色は消える**（#ffff00 は
- * 背景としては 19.6:1 なのに、線としては 1.07:1 で見えない）。**選ぶ場所で
- * 両方の見え方を出す**ことで、「保存してから戦績を見たら線が無かった」を防ぐ。
- * ただし**選べなくはしない**。どの色を使うかは運営（山本さん）の判断。
+ * **警告は置いていない。**
+ *   - 背景は明度を固定しているので、黒文字とのコントラストは必ず 16:1 以上
+ *   - 線は白地で 3:1 を満たす濃さに直してから使う
+ * どちらも条件を満たせない色が無いので、書いても出ない。出ない警告があると
+ * 「警告が出ていないから安全」という誤解の余地を残す（→ 下限はテストで固定）。
  */
 
 import { Button } from "@/components/ui/button";
-import { isVisibleAsLine, lineContrast, MIN_LINE_CONTRAST } from "@/lib/chart-palette";
-import { contrastRatio, normalizeTeamColor, readableTextColor } from "@/lib/team-color";
+import { badgeBackground, BADGE_TEXT_COLOR, lineColor, normalizeTeamColor } from "@/lib/team-color";
 
 export function TeamColorField({
   teamId,
@@ -35,8 +29,7 @@ export function TeamColorField({
   // <input type="color"> は空を扱えないので、未設定のときの見た目だけ既定値を入れる。
   // **その値は保存しない**（color が null のままなら「未設定」）
   const shown = color ?? "#cccccc";
-  const text = color === null ? undefined : readableTextColor(color);
-  const ratio = color === null ? null : contrastRatio(color, readableTextColor(color));
+  const 見出し = name || `#${teamId}`;
 
   return (
     <div className="mt-2">
@@ -47,19 +40,21 @@ export function TeamColorField({
           value={shown}
           onChange={(e) => onChange(normalizeTeamColor(e.target.value))}
           className="border-input h-8 w-12 shrink-0 rounded-lg border bg-transparent"
-          aria-label={`${name || `#${teamId}`} の色`}
+          aria-label={`${見出し} の色`}
         />
-        {/* 実際に敷いたときと同じ組み合わせを出す。未設定なら「敷かない」見た目 */}
+        {/* 名前の背景としての見え方。ランキングに出るのと同じ組み合わせ */}
         <span
-          className="min-w-0 truncate rounded-md border px-2 py-1 text-sm"
+          className="min-w-0 truncate rounded-md px-2 py-1 text-sm"
           style={
-            color === null ? undefined : { backgroundColor: color, color: text, borderColor: color }
+            color === null
+              ? undefined
+              : { backgroundColor: badgeBackground(color), color: BADGE_TEXT_COLOR }
           }
         >
-          {name || `#${teamId}`}
+          {見出し}
         </span>
-        {/* グラフの線としての見え方。背景と線で必要な条件が違うので両方見せる。
-            下地は実際のグラフと同じ白にする（テーマの背景トークンには乗せない） */}
+        {/* グラフの線としての見え方。下地は実際のグラフと同じ白にする
+            （テーマの背景トークンに乗せると、ここだけ別物になる） */}
         <svg
           width="56"
           height="24"
@@ -68,7 +63,12 @@ export function TeamColorField({
           className="border-input shrink-0 rounded border bg-white"
         >
           {color === null ? null : (
-            <polyline points="4,18 18,8 32,14 52,4" fill="none" stroke={color} strokeWidth="2" />
+            <polyline
+              points="4,18 18,8 32,14 52,4"
+              fill="none"
+              stroke={lineColor(color)}
+              strokeWidth="2"
+            />
           )}
         </svg>
         <Button
@@ -87,20 +87,13 @@ export function TeamColorField({
           未設定です。<strong>ハイライトしません</strong>（名前がそのまま出ます）。
         </p>
       ) : (
-        <>
-          <p className="text-muted-foreground mt-1 text-xs">
-            文字色は明るさから自動で決まります（この色でのコントラスト比 {ratio?.toFixed(1)}:1）。
-            <strong>どの色を選んでも読める組み合わせになります。</strong>
-          </p>
-          {isVisibleAsLine(color) ? null : (
-            // 選べなくはしない。線としては見えない、という事実だけ伝える
-            <p className="text-destructive mt-1 text-xs">
-              <strong>この色は累計pt推移のグラフの線としては見えません</strong>
-              （白に対して {lineContrast(color).toFixed(2)}:1。既定の色は{" "}
-              {MIN_LINE_CONTRAST.toFixed(2)}:1 以上）。名前の背景としては読めます。
-            </p>
-          )}
-        </>
+        <p className="text-muted-foreground mt-1 text-xs">
+          左が<strong>名前の背景</strong>、右が<strong>グラフの線</strong>
+          です。選んだ色から、用途ごとの濃さを作っています
+          {lineColor(color) === normalizeTeamColor(color)
+            ? "（線は選んだ色のまま）。"
+            : "（線は白地で見えるように濃くしました）。"}
+        </p>
       )}
     </div>
   );

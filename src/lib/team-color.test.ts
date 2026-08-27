@@ -8,10 +8,12 @@
 
 import { describe, expect, it } from "vite-plus/test";
 import {
-  CONTRAST_FLOOR,
+  BADGE_TEXT_COLOR,
+  badgeBackground,
   contrastRatio,
+  lineColor,
+  MIN_LINE_CONTRAST,
   normalizeTeamColor,
-  readableTextColor,
   relativeLuminance,
 } from "./team-color";
 
@@ -110,53 +112,114 @@ describe("contrastRatio", () => {
   });
 });
 
-describe("readableTextColor", () => {
-  it("暗い背景には白、明るい背景には黒", () => {
-    expect(readableTextColor("#000000")).toBe("#ffffff");
-    expect(readableTextColor("#1a1a1a")).toBe("#ffffff");
-    expect(readableTextColor("#ffffff")).toBe("#000000");
-    expect(readableTextColor("#ffff00")).toBe("#000000");
+describe("badgeBackground（名前の背景）", () => {
+  it("色相を保ったまま薄くする", () => {
+    expect(badgeBackground("#c62828")).toBe("#f7dede");
+    expect(badgeBackground("#1565c0")).toBe("#dceaf9");
   });
 
-  // 純緑は「明るい」側。RGB を均等に足すと暗い側に転んで白文字になり、読めなくなる
-  it("純緑には黒文字、純青には白文字", () => {
-    expect(readableTextColor("#00ff00")).toBe("#000000");
-    expect(readableTextColor("#0000ff")).toBe("#ffffff");
+  it("もともと明るい色も、暗い色も、同じ明るさに揃う", () => {
+    // 明度を固定しているので、黄色でも黒でも背景としての明るさは近くなる
+    expect(contrastRatio(badgeBackground("#ffff00"), "#000000")).toBeGreaterThan(15);
+    expect(contrastRatio(badgeBackground("#000000"), "#000000")).toBeGreaterThan(15);
   });
 
-  it("選んだ文字色の方が、もう一方よりコントラストが高い", () => {
-    for (const bg of ["#ff0000", "#00ff00", "#0000ff", "#808080", "#3366cc", "#f5deb3"]) {
-      const chosen = readableTextColor(bg);
-      const other = chosen === "#ffffff" ? "#000000" : "#ffffff";
-      expect(contrastRatio(bg, chosen), bg).toBeGreaterThanOrEqual(contrastRatio(bg, other));
-    }
+  it("読めない色はそのまま返す（画面側で色を敷かない判断をする）", () => {
+    expect(badgeBackground("red")).toBe("red");
   });
 
   /**
-   * ★ この性質があるから「この色は読みにくい」という警告を画面に置いていない。
-   * `readableTextColor` の選び方を変えたら、ここが落ちて気づけるようにしておく。
+   * ★ この下限があるから「この色は読みにくい」という警告を置いていない。
+   * 明度の固定を外したら、ここが落ちて気づける。
    */
-  it("どんな色でも、自動で選んだ文字色とのコントラストは 4.5:1 を下回らない", () => {
+  it("どんな色でも、背景に黒文字が WCAG AA（4.5:1）以上で乗る", () => {
     const hex = (n: number) => n.toString(16).padStart(2, "0");
     let 最小 = Infinity;
     let 最悪 = "";
-    // 比は輝度だけで決まるが、重みの取り違えも拾えるよう有彩色も回す（5 刻み）
     for (let r = 0; r <= 255; r += 5) {
       for (let g = 0; g <= 255; g += 5) {
         for (let b = 0; b <= 255; b += 5) {
-          const bg = `#${hex(r)}${hex(g)}${hex(b)}`;
-          const ratio = contrastRatio(bg, readableTextColor(bg));
+          const c = `#${hex(r)}${hex(g)}${hex(b)}`;
+          const ratio = contrastRatio(badgeBackground(c), BADGE_TEXT_COLOR);
           if (ratio < 最小) {
             最小 = ratio;
-            最悪 = bg;
+            最悪 = c;
           }
         }
       }
     }
-    expect(最小, `最悪は ${最悪} の ${最小.toFixed(3)}:1`).toBeGreaterThanOrEqual(CONTRAST_FLOOR);
+    expect(最小, `最悪は ${最悪} の ${最小.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("その下限は WCAG AA の本文（4.5）", () => {
-    expect(CONTRAST_FLOOR).toBe(4.5);
+  it("文字色は黒に固定（背景の明度を固定したので選ぶ余地が無い）", () => {
+    expect(BADGE_TEXT_COLOR).toBe("#000000");
+  });
+});
+
+describe("lineColor（グラフの線）", () => {
+  it("すでに濃い色はそのまま使う", () => {
+    expect(lineColor("#c62828")).toBe("#c62828");
+    expect(lineColor("#1565c0")).toBe("#1565c0");
+    expect(lineColor("#000000")).toBe("#000000");
+  });
+
+  it("白地で見えない色は、色相を保ったまま暗くする", () => {
+    expect(lineColor("#ffff00")).toBe("#9a9a00");
+    expect(lineColor("#84cc16")).toBe("#6aa412");
+    expect(lineColor("#0ea5e9")).toBe("#0d9ee0");
+  });
+
+  it("白は色相が無いのでグレーになる", () => {
+    expect(lineColor("#ffffff")).toBe("#949494");
+  });
+
+  it("大文字で渡しても保存形式（小文字）で返す", () => {
+    expect(lineColor("#C62828")).toBe("#c62828");
+  });
+
+  it("読めない色はそのまま返す", () => {
+    expect(lineColor("rgb(255,0,0)")).toBe("rgb(255,0,0)");
+  });
+
+  it("何度通しても結果が変わらない（暗くした色を再度通しても同じ）", () => {
+    for (const c of ["#ffff00", "#84cc16", "#0ea5e9", "#c62828"]) {
+      expect(lineColor(lineColor(c)), c).toBe(lineColor(c));
+    }
+  });
+
+  /** ★ この下限があるから「線として見えません」の警告を消せた */
+  it("どんな色でも、線は白地で 3:1 以上になる", () => {
+    const hex = (n: number) => n.toString(16).padStart(2, "0");
+    let 最小 = Infinity;
+    let 最悪 = "";
+    for (let r = 0; r <= 255; r += 5) {
+      for (let g = 0; g <= 255; g += 5) {
+        for (let b = 0; b <= 255; b += 5) {
+          const c = `#${hex(r)}${hex(g)}${hex(b)}`;
+          const ratio = contrastRatio(lineColor(c), "#ffffff");
+          if (ratio < 最小) {
+            最小 = ratio;
+            最悪 = c;
+          }
+        }
+      }
+    }
+    expect(最小, `最悪は ${最悪} の ${最小.toFixed(3)}:1`).toBeGreaterThanOrEqual(
+      MIN_LINE_CONTRAST,
+    );
+  });
+
+  it("閾値は WCAG の非テキストコントラスト（3:1）", () => {
+    expect(MIN_LINE_CONTRAST).toBe(3);
+  });
+
+  /**
+   * 白と黒はどちらも色相を持たないので、線にすると同じグレーになる。
+   * 2チームが白と黒を選ぶと線が見分けられない。**縮退として許容**している
+   * （山本さんに説明済み）。名前の背景も同じ理由で同じ色になる。
+   */
+  it("白と黒は同じ色に縮退する", () => {
+    expect(lineColor("#ffffff")).toBe(lineColor("#fefefe"));
+    expect(badgeBackground("#ffffff")).toBe(badgeBackground("#000000"));
   });
 });

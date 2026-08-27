@@ -8,13 +8,8 @@
  */
 
 import { describe, expect, it } from "vite-plus/test";
-import {
-  CHART_PALETTE,
-  MIN_LINE_CONTRAST,
-  isVisibleAsLine,
-  lineContrast,
-  seriesColors,
-} from "./chart-palette";
+import { CHART_PALETTE, seriesColors } from "./chart-palette";
+import { contrastRatio, lineColor, MIN_LINE_CONTRAST } from "./team-color";
 
 describe("seriesColors", () => {
   it("色を渡さなければパレットの順に使う", () => {
@@ -27,13 +22,20 @@ describe("seriesColors", () => {
     expect(colors[CHART_PALETTE.length + 1]).toBe(CHART_PALETTE[1]);
   });
 
-  it("チームの色があればそれを使う", () => {
+  it("チームの色は、線として見える濃さに直してから使う", () => {
+    // 濃い色はそのまま
     expect(seriesColors(2, ["#c62828", "#1565c0"])).toEqual(["#c62828", "#1565c0"]);
+    // 薄い色は暗くなる（選ばれた色をそのまま線にしない）
+    expect(seriesColors(1, ["#ffff00"])).toEqual(["#9a9a00"]);
   });
 
   it("★ 片方だけ色を設定した状態でも破綻しない（null はパレットに落ちる）", () => {
     expect(seriesColors(2, ["#c62828", null])).toEqual(["#c62828", CHART_PALETTE[1]]);
     expect(seriesColors(2, [null, "#1565c0"])).toEqual([CHART_PALETTE[0], "#1565c0"]);
+  });
+
+  it("パレットには派生をかけない（個人モードの見た目を変えない）", () => {
+    expect(seriesColors(3)).toEqual([CHART_PALETTE[0], CHART_PALETTE[1], CHART_PALETTE[2]]);
   });
 
   it("両方とも未設定なら今までと同じ見た目になる", () => {
@@ -52,42 +54,33 @@ describe("seriesColors", () => {
 
 describe("線としての見やすさ", () => {
   /**
-   * ★ 背景として良い色が、線として良いとは限らない。
-   * #ffff00 は黒文字を乗せれば 19.6:1 だが、白の上に 2px の線として引くと見えない。
-   * 実際に画面で見て確かめた値（→ chart-palette.ts のコメント）。
+   * ★ チームの色は `lineColor` を通してから線にするので、**薄い色が線に来ない**。
+   * だから運営メニューの「線としては見えません」警告は消した（絶対に出ないため）。
    */
-  it("明るい色は線として見えない", () => {
-    expect(lineContrast("#ffff00")).toBeLessThan(1.2);
-    expect(lineContrast("#f5f5dc")).toBeLessThan(1.2);
-    expect(isVisibleAsLine("#ffff00")).toBe(false);
-    expect(isVisibleAsLine("#f5f5dc")).toBe(false);
-  });
-
-  it("実際に見えた色は通る", () => {
-    for (const color of ["#84cc16", "#f59e0b", "#0ea5e9", "#c62828", "#1565c0"]) {
-      expect(isVisibleAsLine(color), color).toBe(true);
+  it("薄い色を渡しても、線は白地で 3:1 を満たす", () => {
+    for (const color of ["#ffff00", "#f5f5dc", "#ffffff", "#84cc16"]) {
+      const [line] = seriesColors(1, [color]);
+      expect(contrastRatio(line, "#ffffff"), `${color} → ${line}`).toBeGreaterThanOrEqual(
+        MIN_LINE_CONTRAST,
+      );
     }
   });
 
-  it("★ 閾値は既定パレットの最小そのもの。パレット全色が「見える」側に入る", () => {
-    for (const color of CHART_PALETTE) {
-      expect(isVisibleAsLine(color), color).toBe(true);
+  it("濃い色は選ばれたまま線になる", () => {
+    for (const color of ["#c62828", "#1565c0", "#059669", "#000000"]) {
+      expect(seriesColors(1, [color])).toEqual([lineColor(color)]);
+      expect(seriesColors(1, [color])).toEqual([color]);
     }
-    expect(MIN_LINE_CONTRAST).toBeCloseTo(Math.min(...CHART_PALETTE.map(lineContrast)), 10);
   });
 
-  it("閾値は 1.9〜2.1 の範囲にある（パレットを入れ替えたら気づけるように）", () => {
-    expect(MIN_LINE_CONTRAST).toBeGreaterThan(1.9);
-    expect(MIN_LINE_CONTRAST).toBeLessThan(2.1);
-  });
-
-  it("白そのものは線として使えない", () => {
-    expect(lineContrast("#ffffff")).toBeCloseTo(1, 5);
-    expect(isVisibleAsLine("#ffffff")).toBe(false);
-  });
-
-  it("黒は最もよく見える", () => {
-    expect(lineContrast("#000000")).toBeCloseTo(21, 1);
-    expect(isVisibleAsLine("#000000")).toBe(true);
+  /**
+   * ★ 既定パレットには派生をかけていないので、ここは 3:1 を満たさない色を含む
+   * （`#84cc16` は 1.98:1）。個人モードの線は**実測でははっきり見える**ことを
+   * 画面で確認している。チーム色と基準が違うことを、事実として書いておく。
+   */
+  it("既定パレットは 3:1 を満たさない色を含む（個人モード用・派生させていない）", () => {
+    const 比 = CHART_PALETTE.map((c) => contrastRatio(c, "#ffffff"));
+    expect(Math.min(...比)).toBeLessThan(MIN_LINE_CONTRAST);
+    expect(Math.min(...比)).toBeGreaterThan(1.9);
   });
 });
