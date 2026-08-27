@@ -8,6 +8,7 @@
  * 三色は鳴くと1翻、混一色は2翻で、ここが一番間違えられる。
  */
 
+import { Hand } from "./Hand";
 import { YAKU_SECTIONS, YAKUMAN, type Yaku } from "./yaku-table";
 
 /** 鳴いたときの表示。食い下がりだけ色を変えて、下がったことが分かるようにする */
@@ -40,9 +41,28 @@ export function YakuPage() {
         は食い下がり（鳴くと翻が下がる役）です。
       </p>
 
-      {YAKU_SECTIONS.map((section) => (
+      {/*
+        牌を入れたらページが 4226px（320px の画面で 13 画面分）になった。
+        卓で「三色って何翻だっけ」を引くのにそれだけ振らせない。
+        **折りたたみは入れない**（開閉の状態が増える）。行き先を並べるだけで足りる。
+      */}
+      <nav aria-label="翻数へ移動" className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-sm">
+        {YAKU_SECTIONS.map((section, i) => (
+          <a key={section.title} href={`#sec-${i}`} className="underline">
+            {section.title}
+          </a>
+        ))}
+        <a href="#sec-yakuman" className="underline">
+          役満
+        </a>
+      </nav>
+
+      {YAKU_SECTIONS.map((section, i) => (
         <div key={section.title}>
-          <h3 className="mt-6 font-bold">{section.title}</h3>
+          {/* 飛んだ先で見出しが画面の上端に貼り付かないよう少し空ける */}
+          <h3 id={`sec-${i}`} className="mt-6 scroll-mt-4 font-bold">
+            {section.title}
+          </h3>
           <ul className="mt-2">
             {section.items.map((y) => (
               <li key={y.name} className="border-border border-b py-2 text-sm">
@@ -56,13 +76,16 @@ export function YakuPage() {
                   <span>{y.reading}</span>
                   <span className="shrink-0">{y.note}</span>
                 </div>
+                {y.hand === undefined ? null : <Hand hand={y.hand} />}
               </li>
             ))}
           </ul>
         </div>
       ))}
 
-      <h3 className="mt-6 font-bold">役満</h3>
+      <h3 id="sec-yakuman" className="mt-6 scroll-mt-4 font-bold">
+        役満
+      </h3>
       <ul className="mt-2">
         {YAKUMAN.map((y) => (
           <li key={y.name} className="border-border border-b py-2 text-sm">
@@ -71,6 +94,7 @@ export function YakuPage() {
               <span className="text-muted-foreground shrink-0 text-xs">{y.open}</span>
             </div>
             <div className="text-muted-foreground mt-0.5 text-xs">{y.reading}</div>
+            {y.hand === undefined ? null : <Hand hand={y.hand} />}
           </li>
         ))}
       </ul>
