@@ -64,6 +64,16 @@ export function nextMemberId(knownIds: number[]): number {
  * **制御文字そのものは目に見えない**ので、落としても見た目は変わらない。
  * （ESC で始まるエスケープシーケンスは、ESC を落とすと `[31m` のような
  * 残りが見えるようになるが、それは隠れていたものが見えるだけで正しい挙動）
+ *
+ * ★ フォーマット文字（`\p{Cf}`）も落とす。ゼロ幅スペース（U+200B）や BOM
+ * （U+FEFF）だけの名前が通ると、**ランキングに見えないリンクが出る**。
+ * Web からの貼り付けでうっかり混ざるので、事故として起こりうる。
+ * 落とすと `sanitizeName` の結果が空になり、`parseChanges` が 400 で弾く。
+ *
+ * **代わりに失うもの: 絵文字の ZWJ（U+200D）。** 👨‍👩‍👧 のような結合絵文字は
+ * ばらけて別の絵文字になる。10人の名前に結合絵文字が入る想定が無いのに対し、
+ * 見えない名前は事故で起きるので、こちらを取った。
+ * 双方向制御（U+202E など）も同じ理由で落ちる。
  */
 /**
  * 名前の上限。`TITLE_MAX_LENGTH` と同じ 60。
@@ -77,7 +87,7 @@ export function sanitizeName(value: string): string {
   // oxlint の no-control-regex を抑制する。制御文字を落とすのが目的なので、
   // 正規表現に制御文字が出るのは意図どおり（外すと実際に警告が出ることを確認済み）
   // eslint-disable-next-line no-control-regex
-  return value.replaceAll(/[\u0000-\u001F\u007F]/gu, "");
+  return value.replaceAll(/[\u0000-\u001F\u007F]|\p{Cf}/gu, "");
 }
 
 export type Change =

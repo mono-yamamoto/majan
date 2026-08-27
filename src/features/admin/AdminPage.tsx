@@ -47,6 +47,7 @@ import {
   type NewRow,
   type RosterRow,
 } from "@/lib/roster-changes";
+import { membersByImpact } from "./impact";
 import { useWriteAction } from "@/lib/use-write-action";
 
 export function AdminPage() {
@@ -144,12 +145,15 @@ function AdminBody({
     [league.name, teams, leagueName, teamNames, current, edited, added],
   );
 
-  // 半荘に1度でも出た人。所属を外すと過去の半荘が編集できなくなる
-  const played = useMemo(() => {
-    const ids = new Set<number>();
-    for (const game of games) for (const r of game.results) ids.add(r.memberId);
-    return ids;
-  }, [games]);
+  const rule = useMemo(
+    () => ({ startPoint: league.startPoint, returnPoint: league.returnPoint, uma: league.uma }),
+    [league],
+  );
+
+  // 影響の分け方は impact.ts に置いてテストしてある（予定だけの人に
+  // 「pt が釣り合わなくなる」と言わないための分岐）
+  const { scored, other } = useMemo(() => membersByImpact(games, rule), [games, rule]);
+  const played = useMemo(() => new Set([...scored, ...other]), [scored, other]);
 
   // 表示は編集後の名前を使う。「チームA から」の注記や人数が古い名前のままだと、
   // 画面が事実と違うことを言うことになる
@@ -180,7 +184,8 @@ function AdminBody({
     return map;
   }, [edited, added, teams]);
 
-  const removingPlayed = changes.filter((c) => c.kind === "remove" && played.has(c.memberId));
+  const removingScored = changes.filter((c) => c.kind === "remove" && scored.has(c.memberId));
+  const removingReserved = changes.filter((c) => c.kind === "remove" && other.has(c.memberId));
   const movingAfterStart = games.length > 0 && changes.some((c) => c.kind === "team");
 
   /**
@@ -378,16 +383,26 @@ function AdminBody({
         ))}
       </ul>
 
-      {removingPlayed.length > 0 ? (
+      {removingScored.length > 0 ? (
         <p className="border-destructive text-destructive mt-6 rounded-lg border p-3 text-sm">
           <strong>
-            {removingPlayed.map((c) => (c.kind === "remove" ? c.name : "")).join("・")}
+            {removingScored.map((c) => (c.kind === "remove" ? c.name : "")).join("・")}
           </strong>
-          は既に半荘に出ています。所属を外すと、
+          は結果の出た半荘に出ています。所属を外すと、
           <strong>その人を含む過去の半荘が編集できなくなり</strong>、
           <strong>チーム合計 pt が釣り合わなくなります</strong>
-          （その人の pt
-          がどちらのチームにも入らないため）。まだ半荘に出ていない人なら外して問題ありません。
+          （その人の pt がどちらのチームにも入らないため）。
+        </p>
+      ) : null}
+
+      {removingReserved.length > 0 ? (
+        <p className="border-destructive text-destructive mt-4 rounded-lg border p-3 text-sm">
+          <strong>
+            {removingReserved.map((c) => (c.kind === "remove" ? c.name : "")).join("・")}
+          </strong>
+          は予定（素点がまだ入っていない半荘）に入っています。所属を外すと、
+          <strong>その予定が編集できなくなります</strong>。pt
+          はまだ無いので、チーム合計は狂いません。
         </p>
       ) : null}
 
@@ -460,7 +475,9 @@ function AdminBody({
       {/* 「よろしいですか」だけにしない。誰を外すのか / 誰の pt がどちらへ移るのかを
           名指しで出す。出せないなら確認を挟む意味が無い */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
+        {/* 10人全員を外すと項目が11行になる。iPhone SE（高さ 568px）だと
+            ボタンが画面の外に出るので、中身をスクロールさせて必ず届くようにする */}
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>戻せない変更が含まれています</DialogTitle>
             <DialogDescription>反映すると、次のことが起きます。</DialogDescription>
@@ -469,16 +486,22 @@ function AdminBody({
             {removes.map((c) => (
               <li key={`r-${c.kind === "remove" ? c.memberId : ""}`}>
                 <strong>{c.kind === "remove" ? c.name : ""}</strong> を名簿から外します。
-                {c.kind === "remove" && played.has(c.memberId) ? (
+                {c.kind !== "remove" ? null : scored.has(c.memberId) ? (
                   <>
-                    この人は既に半荘に出ているので、
+                    この人は結果の出た半荘に出ているので、
                     <strong>
                       過去の半荘が編集できなくなり、チーム合計 pt が釣り合わなくなります
                     </strong>
                     。
                   </>
+                ) : other.has(c.memberId) ? (
+                  <>
+                    この人は予定（素点がまだ入っていない半荘）に入っているので、
+                    <strong>その予定が編集できなくなります</strong>。pt
+                    はまだ無いので、チーム合計は狂いません。
+                  </>
                 ) : (
-                  <>まだ半荘に出ていないので、影響はありません。</>
+                  <>まだどの半荘にも入っていないので、影響はありません。</>
                 )}
               </li>
             ))}

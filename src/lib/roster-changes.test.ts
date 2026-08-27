@@ -55,6 +55,21 @@ describe("sanitizeName", () => {
   it("空文字はそのまま", () => {
     expect(sanitizeName("")).toBe("");
   });
+
+  it("★ ゼロ幅スペース（U+200B）を落とす（見えない名前を作らせない）", () => {
+    expect(sanitizeName("\u200b")).toBe("");
+    expect(sanitizeName("a\u200bb")).toBe("ab");
+  });
+
+  it("★ BOM（U+FEFF）と双方向制御（U+202E）も落とす", () => {
+    expect(sanitizeName("\ufeff")).toBe("");
+    expect(sanitizeName("a\u202eb")).toBe("ab");
+  });
+
+  it("絵文字の ZWJ も落ちる（結合絵文字はばらける。承知のうえ）", () => {
+    // \u{1F468}\u200D\u{1F469} は ZWJ が落ちて2つの絵文字になる
+    expect(sanitizeName("\u{1F468}\u200D\u{1F469}")).toBe("\u{1F468}\u{1F469}");
+  });
 });
 
 describe("diffRoster", () => {

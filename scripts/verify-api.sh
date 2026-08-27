@@ -544,6 +544,8 @@ ROSTER 400 'roster: 改名先が制御文字だけ' "$(RENAME3 '\u0000\u001b')"
 ROSTER 400 'roster: 改名先が61文字'       "$(RENAME3 "$(head -c 61 /dev/zero | tr '\0' 'x')")"
 ROSTER 400 'roster: チーム名が空文字'     "$(printf '{"changes":[{"kind":"teamName","teamId":1,"before":"%s","after":""}]}' "$team1_before")"
 ROSTER 400 'roster: リーグ名が空白だけ'   "$(printf '{"changes":[{"kind":"leagueName","before":"%s","after":"  "}]}' "$league_before")"
+ROSTER 400 'roster: 改名先がゼロ幅スペースだけ' "$(RENAME3 '\u200b')"
+ROSTER 400 'roster: 改名先が BOM だけ'          "$(RENAME3 '\ufeff')"
 ROSTER 400 'roster: 追加の名前が空白だけ' '{"changes":[{"kind":"add","memberId":60,"name":"   ","teamId":1}]}'
 check "400 のあと名前が変わっていない"     "$(Q "SELECT name FROM members WHERE id=3;")" "$name3_before"
 check "400 のあとチーム名も変わっていない" "$(Q "SELECT name FROM teams WHERE id=1;")" "$team1_before"
