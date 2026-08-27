@@ -18,6 +18,15 @@ export type ImpactGame = {
 };
 
 export type Impact = {
+  /**
+   * **結果の出た半荘の件数。** 所属変更の警告はこれで出す。
+   *
+   * `games.length` で数えると、予定しか無いリーグでも「pt が移ります」と言う。
+   * 予定には pt が無いので嘘になるし、そのとき所属変更は**戻せる操作**なので
+   * 「戻せない変更」という見出しも当てはまらない。
+   * 合宿は予定を先に入れてから始まるので、**その期間が一番この画面を使う**。
+   */
+  scoredGames: number;
   /** 結果の出た半荘に出ている。pt が動く + その半荘が編集できなくなる */
   scored: Set<number>;
   /**
@@ -31,9 +40,12 @@ export type Impact = {
 export function membersByImpact(games: ImpactGame[], rule: LeagueRule): Impact {
   const scored = new Set<number>();
   const other = new Set<number>();
+  let scoredGames = 0;
 
   for (const game of games) {
-    const target = isScorable(game, rule) ? scored : other;
+    const ok = isScorable(game, rule);
+    if (ok) scoredGames += 1;
+    const target = ok ? scored : other;
     for (const r of game.results) target.add(r.memberId);
   }
 
@@ -41,5 +53,5 @@ export function membersByImpact(games: ImpactGame[], rule: LeagueRule): Impact {
   // 両方に入れると、確認の文が二重に出る
   for (const id of scored) other.delete(id);
 
-  return { scored, other };
+  return { scoredGames, scored, other };
 }

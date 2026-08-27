@@ -60,6 +60,32 @@ describe("membersByImpact", () => {
     expect([...other].sort((a, b) => a - b)).toEqual([1, 2, 3]);
   });
 
+  it("★ scoredGames は結果の出た半荘だけを数える（予定を数えない）", () => {
+    expect(membersByImpact([reservedGame([1, 2, 3, 4])], rule).scoredGames).toBe(0);
+    expect(membersByImpact([scoredGame([1, 2, 3, 4])], rule).scoredGames).toBe(1);
+    expect(
+      membersByImpact([scoredGame([1, 2, 3, 4]), reservedGame([1, 2, 3, 4])], rule).scoredGames,
+    ).toBe(1);
+  });
+
+  it("★ 壊れた半荘も scoredGames に数えない（pt が付いていない）", () => {
+    const broken: ImpactGame = {
+      results: [
+        { memberId: 1, rawScore: 25000 },
+        { memberId: 2, rawScore: null },
+        { memberId: 3, rawScore: null },
+        { memberId: 4, rawScore: null },
+      ],
+    };
+    expect(membersByImpact([broken], rule).scoredGames).toBe(0);
+    // 人数不足も同じ
+    expect(membersByImpact([scoredGame([1, 2, 3])], rule).scoredGames).toBe(0);
+  });
+
+  it("半荘が無ければ scoredGames は 0", () => {
+    expect(membersByImpact([], rule).scoredGames).toBe(0);
+  });
+
   it("どの半荘にも出ていない人は、どちらにも入らない", () => {
     const { scored, other } = membersByImpact([scoredGame([1, 2, 3, 4])], rule);
     expect(scored.has(9)).toBe(false);

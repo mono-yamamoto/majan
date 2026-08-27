@@ -152,7 +152,7 @@ function AdminBody({
 
   // 影響の分け方は impact.ts に置いてテストしてある（予定だけの人に
   // 「pt が釣り合わなくなる」と言わないための分岐）
-  const { scored, other } = useMemo(() => membersByImpact(games, rule), [games, rule]);
+  const { scoredGames, scored, other } = useMemo(() => membersByImpact(games, rule), [games, rule]);
   const played = useMemo(() => new Set([...scored, ...other]), [scored, other]);
 
   // 表示は編集後の名前を使う。「チームA から」の注記や人数が古い名前のままだと、
@@ -186,7 +186,8 @@ function AdminBody({
 
   const removingScored = changes.filter((c) => c.kind === "remove" && scored.has(c.memberId));
   const removingReserved = changes.filter((c) => c.kind === "remove" && other.has(c.memberId));
-  const movingAfterStart = games.length > 0 && changes.some((c) => c.kind === "team");
+  // games.length で数えない。予定しか無いリーグでも「pt が移る」と言うことになる
+  const movingAfterStart = scoredGames > 0 && changes.some((c) => c.kind === "team");
 
   /**
    * 確認を1枚挟むかどうか。**戻らない操作のときだけ**出す。
@@ -196,7 +197,9 @@ function AdminBody({
    * 毎回出すと、山本さんが「SQL が面倒」と言って消したはずの摩擦が戻る。
    */
   const removes = changes.filter((c) => c.kind === "remove");
-  const moves = games.length > 0 ? changes.filter((c) => c.kind === "team") : [];
+  // 予定しか無いなら所属変更は**戻せる操作**（戻せば完全に元通り）なので、
+  // 確認を挟まない。「戻せない変更が含まれています」の見出しも当てはまらない
+  const moves = scoredGames > 0 ? changes.filter((c) => c.kind === "team") : [];
   const needsConfirm = removes.length > 0 || moves.length > 0;
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -400,15 +403,15 @@ function AdminBody({
           <strong>
             {removingReserved.map((c) => (c.kind === "remove" ? c.name : "")).join("・")}
           </strong>
-          は予定（素点がまだ入っていない半荘）に入っています。所属を外すと、
-          <strong>その予定が編集できなくなります</strong>。pt
-          はまだ無いので、チーム合計は狂いません。
+          は、結果として集計されていない半荘（予定や、素点のそろっていない半荘）に入っています。
+          所属を外すと、<strong>その半荘が編集できなくなります</strong>。pt
+          はまだ付いていないので、チーム合計は狂いません。
         </p>
       ) : null}
 
       {movingAfterStart ? (
         <p className="border-destructive text-destructive mt-4 rounded-lg border p-3 text-sm">
-          既に半荘が {games.length} 件あります。
+          既に結果の出た半荘が {scoredGames} 件あります。
           <strong>開幕後に所属を変えると、その人が過去に稼いだ pt も新しいチームに移ります</strong>
           。チーム合計 pt
           は「現在の所属メンバーの総和」で計算していて、過去の所属を記録していないためです。
@@ -496,9 +499,9 @@ function AdminBody({
                   </>
                 ) : other.has(c.memberId) ? (
                   <>
-                    この人は予定（素点がまだ入っていない半荘）に入っているので、
-                    <strong>その予定が編集できなくなります</strong>。pt
-                    はまだ無いので、チーム合計は狂いません。
+                    この人は結果として集計されていない半荘（予定や、素点のそろっていない半荘）に
+                    入っているので、<strong>その半荘が編集できなくなります</strong>。pt
+                    はまだ付いていないので、チーム合計は狂いません。
                   </>
                 ) : (
                   <>まだどの半荘にも入っていないので、影響はありません。</>
@@ -510,8 +513,8 @@ function AdminBody({
                 <strong>{c.kind === "team" ? c.name : ""}</strong> を{" "}
                 {c.kind === "team" ? teamName(c.before) : ""} から{" "}
                 {c.kind === "team" ? teamName(c.after) : ""} へ移します。
-                <strong>この人が過去に稼いだ pt も移ります</strong>（既に半荘が {games.length}{" "}
-                件あります）。
+                <strong>この人が過去に稼いだ pt も移ります</strong>（既に結果の出た半荘が{" "}
+                {scoredGames} 件あります）。
               </li>
             ))}
           </ul>

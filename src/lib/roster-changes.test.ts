@@ -61,6 +61,12 @@ describe("sanitizeName", () => {
     expect(sanitizeName("a\u200bb")).toBe("ab");
   });
 
+  it("★ C1 制御（U+0080–U+009F）も落とす（C0 と DEL の続きなので残す理由が無い）", () => {
+    expect(sanitizeName("a\u0085b")).toBe("ab");
+    expect(sanitizeName("a\u009bb")).toBe("ab");
+    expect(sanitizeName("\u0080\u009f")).toBe("");
+  });
+
   it("★ BOM（U+FEFF）と双方向制御（U+202E）も落とす", () => {
     expect(sanitizeName("\ufeff")).toBe("");
     expect(sanitizeName("a\u202eb")).toBe("ab");

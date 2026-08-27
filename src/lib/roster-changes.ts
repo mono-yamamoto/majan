@@ -51,7 +51,7 @@ export function nextMemberId(knownIds: number[]): number {
 }
 
 /**
- * 名前から C0 制御文字（NUL・ESC・BEL など）と DEL を落とす。
+ * 名前から制御文字（`\p{Cc}`: NUL・ESC・BEL・DEL・C1）とフォーマット文字を落とす。
  *
  * とくに **NUL が致命的**で、`--file` で流すと **SQL が NUL の位置で切れ、
  * sqlite3 が黙って残りを捨てる**（エラーにならず、何も入らない）。
@@ -87,7 +87,7 @@ export function sanitizeName(value: string): string {
   // oxlint の no-control-regex を抑制する。制御文字を落とすのが目的なので、
   // 正規表現に制御文字が出るのは意図どおり（外すと実際に警告が出ることを確認済み）
   // eslint-disable-next-line no-control-regex
-  return value.replaceAll(/[\u0000-\u001F\u007F]|\p{Cf}/gu, "");
+  return value.replaceAll(/\p{Cc}|\p{Cf}/gu, "");
 }
 
 export type Change =
