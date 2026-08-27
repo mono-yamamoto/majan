@@ -31,6 +31,7 @@
 
 import { Hono } from "hono";
 import { NAME_MAX_LENGTH, sanitizeName, type Change } from "../../src/lib/roster-changes";
+import { normalizeTeamColor } from "../../src/lib/team-color";
 import { requirePasscode } from "../auth";
 import { readJson } from "../body";
 import type { Bindings } from "../index";
@@ -43,8 +44,8 @@ roster.on(["POST"], "/api/leagues/:id/roster", requirePasscode);
 /** 現在の DB の状態。`before` の突き合わせに使う */
 type Current = {
   leagueName: string;
-  /** team_id → チーム名。**このリーグのチームだけ** */
-  teams: Map<number, string>;
+  /** team_id → チーム名と色。**このリーグのチームだけ** */
+  teams: Map<number, { name: string; color: string | null }>;
   /** member_id → 名前。members 全体（別リーグの人も含む。id の重複を見るため） */
   memberNames: Map<number, string>;
   /** member_id → team_id。**このリーグの所属だけ** */
@@ -54,7 +55,7 @@ type Current = {
 async function loadCurrent(db: D1Database, leagueId: number): Promise<Current | null> {
   const [leagueRes, teamRes, memberRes, rosterRes] = await db.batch([
     db.prepare("SELECT name FROM leagues WHERE id = ?1").bind(leagueId),
-    db.prepare("SELECT id, name FROM teams WHERE league_id = ?1").bind(leagueId),
+    db.prepare("SELECT id, name, color FROM teams WHERE league_id = ?1").bind(leagueId),
     db.prepare("SELECT id, name FROM members"),
     db.prepare("SELECT member_id, team_id FROM league_members WHERE league_id = ?1").bind(leagueId),
   ]);
@@ -64,7 +65,12 @@ async function loadCurrent(db: D1Database, leagueId: number): Promise<Current | 
 
   return {
     leagueName: league.name,
-    teams: new Map((teamRes.results as { id: number; name: string }[]).map((t) => [t.id, t.name])),
+    teams: new Map(
+      (teamRes.results as { id: number; name: string; color: string | null }[]).map((t) => [
+        t.id,
+        { name: t.name, color: t.color },
+      ]),
+    ),
     memberNames: new Map(
       (memberRes.results as { id: number; name: string }[]).map((m) => [m.id, m.name]),
     ),
@@ -141,6 +147,22 @@ function parseChanges(body: unknown): { ok: true; value: Change[] } | { ok: fals
           before: c.before as string,
           after: after.value,
         });
+        break;
+      }
+      case "teamColor": {
+        if (!int(c.teamId)) return bad("teamId must be a positive integer");
+        // before は「まだ色が無い」= null を取る。teamName の before（必ず文字列）と違う
+        if (c.before !== null && !str(c.before)) return bad("before must be a string or null");
+        const before = c.before === null ? null : normalizeTeamColor(c.before as string);
+        if (c.before !== null && before === null) return bad("before must be #rrggbb or null");
+        // after が null なら「色を消す」。空文字は 400 にして、消す道を1本に絞る
+        let after: string | null = null;
+        if (c.after !== null) {
+          if (!str(c.after)) return bad("after must be a string or null");
+          after = normalizeTeamColor(c.after as string);
+          if (after === null) return bad("after must be #rrggbb or null");
+        }
+        out.push({ kind: "teamColor", teamId: c.teamId as number, before, after });
         break;
       }
       case "rename": {
@@ -233,11 +255,28 @@ function validate(
       case "teamName": {
         // teams.id はグローバルな主キーなので、league_id で絞らないと
         // body に他リーグの teamId を入れて別リーグの名前を書き換えられる
-        const name = current.teams.get(change.teamId);
-        if (name === undefined) {
+        const team = current.teams.get(change.teamId);
+        if (team === undefined) {
           badRequests.push(`team ${change.teamId} is not in league ${leagueId}`);
-        } else if (name !== change.before) {
-          conflicts.push({ kind: change.kind, message: `チーム名が「${name}」に変わっています` });
+        } else if (team.name !== change.before) {
+          conflicts.push({
+            kind: change.kind,
+            message: `チーム名が「${team.name}」に変わっています`,
+          });
+        }
+        break;
+      }
+
+      case "teamColor": {
+        // teamName と同じで、league_id で絞らないと他リーグのチームを塗り替えられる
+        const team = current.teams.get(change.teamId);
+        if (team === undefined) {
+          badRequests.push(`team ${change.teamId} is not in league ${leagueId}`);
+        } else if (team.color !== change.before) {
+          conflicts.push({
+            kind: change.kind,
+            message: `「${team.name}」の色が変わっています（${team.color ?? "未設定"}）`,
+          });
         }
         break;
       }
@@ -320,6 +359,13 @@ function statementsFor(db: D1Database, change: Change, leagueId: number): D1Prep
       return [
         db
           .prepare("UPDATE teams SET name = ?1 WHERE id = ?2 AND league_id = ?3")
+          .bind(change.after, change.teamId, leagueId),
+      ];
+    case "teamColor":
+      // after が null なら色を消す。bind(null) はそのまま NULL になる
+      return [
+        db
+          .prepare("UPDATE teams SET color = ?1 WHERE id = ?2 AND league_id = ?3")
           .bind(change.after, change.teamId, leagueId),
       ];
     case "rename":

@@ -9,6 +9,8 @@
  * 差分の取り方はここに閉じてテストで固定する。
  */
 
+import { normalizeTeamColor } from "./team-color";
+
 /** 名簿の1行。画面の編集前後で同じ形を使う */
 export type RosterRow = {
   memberId: number;
@@ -93,6 +95,17 @@ export function sanitizeName(value: string): string {
 export type Change =
   | { kind: "leagueName"; before: string; after: string }
   | { kind: "teamName"; teamId: number; before: string; after: string }
+  /**
+   * チームの色。**`after: null` は「色を消す」**。
+   *
+   * 名前（`teamName`）は空を「入力途中」とみなして 400 にするが、色は逆で
+   * **消せる導線が要る**（一度付けた色を戻せないと困る）。ただし「消す」は
+   * `null` の1通りに決める。空文字 `""` は 400。2通りあると、どちらが正なのかが
+   * 実装と画面で食い違う。
+   *
+   * `before` も null になりうる（まだ色が付いていないチーム）。
+   */
+  | { kind: "teamColor"; teamId: number; before: string | null; after: string | null }
   | { kind: "rename"; memberId: number; before: string; after: string }
   /**
    * `team` と `remove` の `name` は**画面の入力欄に見えている名前**。
@@ -166,8 +179,8 @@ export function diffRoster(current: RosterRow[], edited: EditedRow[], added: New
  *   並べない（変更手順は Guidebook の「ルール変更したいとき」）。
  */
 export function diffNames(
-  current: { leagueName: string; teams: { id: number; name: string }[] },
-  edited: { leagueName: string; teams: { id: number; name: string }[] },
+  current: { leagueName: string; teams: { id: number; name: string; color: string | null }[] },
+  edited: { leagueName: string; teams: { id: number; name: string; color: string | null }[] },
 ): Change[] {
   const changes: Change[] = [];
 
@@ -184,6 +197,12 @@ export function diffNames(
     // 空は「消す」ではなく「入力途中」。メンバー名と同じ扱い
     if (after !== "" && after !== team.name) {
       changes.push({ kind: "teamName", teamId: team.id, before: team.name, after });
+    }
+    // 色は名前と逆で、**空（null）が「消す」**。取り消せない設定にしない。
+    // 正規化してから比べる（#FF0000 と #ff0000 を「変更」と見ない）
+    const colorAfter = next.color === null ? null : normalizeTeamColor(next.color);
+    if (colorAfter !== team.color) {
+      changes.push({ kind: "teamColor", teamId: team.id, before: team.color, after: colorAfter });
     }
   }
 

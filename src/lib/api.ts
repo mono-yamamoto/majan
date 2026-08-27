@@ -50,7 +50,7 @@ export type LeagueResponse = {
     uma: [number, number, number, number];
     createdAt: string;
   };
-  teams: { id: number; name: string }[];
+  teams: { id: number; name: string; color: string | null }[];
   members: { id: number; name: string; teamId: number }[];
   games: {
     id: number;

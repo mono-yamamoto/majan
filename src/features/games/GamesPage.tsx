@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
+import { TeamBadge } from "@/components/TeamBadge";
 import { useLeague } from "@/lib/league-context";
 import { useNewGameSheet } from "@/lib/new-game-sheet";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
@@ -28,7 +29,7 @@ function GameHeading({ game }: { game: Game }) {
 }
 
 export function GamesPage() {
-  const { games, members, league, roster, reload } = useLeague();
+  const { games, members, teams, league, roster, reload } = useLeague();
   // 見るだけの画面なので自動更新する（入力中のフォームが無い）。
   // ただし登録シートが開いている間は止める（上に書き込む UI が載るため）
   useAutoRefresh(reload, useNewGameSheet().open);
@@ -36,6 +37,8 @@ export function GamesPage() {
   const base = `/leagues/${leagueId}`;
 
   const nameOf = (id: number) => members.find((m) => m.id === id)?.name ?? `#${id}`;
+  /** チームの色。未設定・知らない id は null（＝ハイライトしない） */
+  const colorOf = (id: number) => teams.find((t) => t.id === id)?.color ?? null;
   const rule = useMemo(
     () => ({ startPoint: league.startPoint, returnPoint: league.returnPoint, uma: league.uma }),
     [league],
@@ -148,8 +151,13 @@ export function GamesPage() {
                   <ul className="mt-2 space-y-1 text-sm">
                     {scored.map((s) => (
                       <li key={s.memberId} className="flex justify-between tabular-nums">
+                        {/* 卓組みが 2-2 になっているかを、色で見て分かるようにする。
+                            順位番号は色に埋もれないよう外に出す */}
                         <span>
-                          {s.rank}位 {nameOf(s.memberId)}
+                          {s.rank}位{" "}
+                          <TeamBadge color={colorOf(roster.get(s.memberId) ?? -1)}>
+                            {nameOf(s.memberId)}
+                          </TeamBadge>
                         </span>
                         <span>
                           {s.rawScore.toLocaleString()} / {s.pt > 0 ? "+" : ""}

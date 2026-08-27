@@ -184,8 +184,8 @@ describe("diffNames", () => {
   const CURRENT_NAMES = {
     leagueName: "2026 秋リーグ",
     teams: [
-      { id: 1, name: "チームA" },
-      { id: 2, name: "チームB" },
+      { id: 1, name: "チームA", color: null },
+      { id: 2, name: "チームB", color: null },
     ],
   };
 
@@ -203,8 +203,8 @@ describe("diffNames", () => {
     const edited = {
       ...CURRENT_NAMES,
       teams: [
-        { id: 1, name: "赤" },
-        { id: 2, name: "チームB" },
+        { id: 1, name: "赤", color: null },
+        { id: 2, name: "チームB", color: null },
       ],
     };
     expect(diffNames(CURRENT_NAMES, edited)).toEqual([
@@ -216,8 +216,8 @@ describe("diffNames", () => {
     const edited = {
       leagueName: "2026 合宿",
       teams: [
-        { id: 1, name: "赤" },
-        { id: 2, name: "青" },
+        { id: 1, name: "赤", color: null },
+        { id: 2, name: "青", color: null },
       ],
     };
     expect(diffNames(CURRENT_NAMES, edited).map((c) => c.kind)).toEqual([
@@ -231,8 +231,8 @@ describe("diffNames", () => {
     const edited = {
       leagueName: "",
       teams: [
-        { id: 1, name: "  " },
-        { id: 2, name: "チームB" },
+        { id: 1, name: "  ", color: null },
+        { id: 2, name: "チームB", color: null },
       ],
     };
     expect(diffNames(CURRENT_NAMES, edited)).toEqual([]);
@@ -248,8 +248,83 @@ describe("diffNames", () => {
     expect(diffNames(CURRENT_NAMES, edited)).toEqual([]);
   });
 
+  it("色を付けたら teamColor を出す", () => {
+    const edited = {
+      ...CURRENT_NAMES,
+      teams: [
+        { id: 1, name: "チームA", color: "#ff0000" },
+        { id: 2, name: "チームB", color: null },
+      ],
+    };
+    expect(diffNames(CURRENT_NAMES, edited)).toEqual([
+      { kind: "teamColor", teamId: 1, before: null, after: "#ff0000" },
+    ]);
+  });
+
+  it("色を消したら after が null（名前の空とは扱いが逆）", () => {
+    const 色つき = {
+      ...CURRENT_NAMES,
+      teams: [
+        { id: 1, name: "チームA", color: "#ff0000" },
+        { id: 2, name: "チームB", color: null },
+      ],
+    };
+    expect(diffNames(色つき, CURRENT_NAMES)).toEqual([
+      { kind: "teamColor", teamId: 1, before: "#ff0000", after: null },
+    ]);
+  });
+
+  it("大文字と小文字の違いは変更としない（正規化してから比べる）", () => {
+    const 色つき = {
+      ...CURRENT_NAMES,
+      teams: [
+        { id: 1, name: "チームA", color: "#ff0000" },
+        { id: 2, name: "チームB", color: null },
+      ],
+    };
+    const edited = {
+      ...色つき,
+      teams: [
+        { id: 1, name: "チームA", color: "#FF0000" },
+        { id: 2, name: "チームB", color: null },
+      ],
+    };
+    expect(diffNames(色つき, edited)).toEqual([]);
+  });
+
+  it("読めない色は「消す」になる（素通しさせない）", () => {
+    const 色つき = {
+      ...CURRENT_NAMES,
+      teams: [
+        { id: 1, name: "チームA", color: "#ff0000" },
+        { id: 2, name: "チームB", color: null },
+      ],
+    };
+    const edited = {
+      ...色つき,
+      teams: [
+        { id: 1, name: "チームA", color: "rgb(255,0,0)" },
+        { id: 2, name: "チームB", color: null },
+      ],
+    };
+    expect(diffNames(色つき, edited)).toEqual([
+      { kind: "teamColor", teamId: 1, before: "#ff0000", after: null },
+    ]);
+  });
+
+  it("名前と色を同時に変えたら2件出る", () => {
+    const edited = {
+      ...CURRENT_NAMES,
+      teams: [
+        { id: 1, name: "赤", color: "#ff0000" },
+        { id: 2, name: "チームB", color: null },
+      ],
+    };
+    expect(diffNames(CURRENT_NAMES, edited).map((c) => c.kind)).toEqual(["teamName", "teamColor"]);
+  });
+
   it("知らない team_id は無視する（画面が持っているチームだけを触る）", () => {
-    const edited = { ...CURRENT_NAMES, teams: [{ id: 99, name: "知らないチーム" }] };
+    const edited = { ...CURRENT_NAMES, teams: [{ id: 99, name: "知らないチーム", color: null }] };
     expect(diffNames(CURRENT_NAMES, edited)).toEqual([]);
   });
 });

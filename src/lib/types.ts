@@ -33,6 +33,8 @@ export type TeamRow = {
   id: number;
   league_id: number;
   name: string;
+  /** 個人ランキングなどでチームを示す背景色。#rrggbb の小文字。未設定は null */
+  color: string | null;
 };
 
 export type LeagueMemberRow = {

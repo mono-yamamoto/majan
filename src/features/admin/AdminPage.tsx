@@ -48,6 +48,7 @@ import {
   type RosterRow,
 } from "@/lib/roster-changes";
 import { membersByImpact } from "./impact";
+import { TeamColorField } from "./TeamColorField";
 import { useWriteAction } from "@/lib/use-write-action";
 
 export function AdminPage() {
@@ -122,7 +123,9 @@ function AdminBody({
   );
   // リーグ名とチーム名も同じ「編集して差分を取る」形で扱う
   const [leagueName, setLeagueName] = useState(league.name);
-  const [teamNames, setTeamNames] = useState(() => teams.map((t) => ({ id: t.id, name: t.name })));
+  const [teamNames, setTeamNames] = useState(() =>
+    teams.map((t) => ({ id: t.id, name: t.name, color: t.color })),
+  );
   const [added, setAdded] = useState<NewRow[]>([]);
 
   const apply = useWriteAction<Change[], { applied: number }>(
@@ -225,20 +228,32 @@ function AdminBody({
         />
       </label>
       {teamNames.map((t) => (
-        <label key={t.id} className="mt-3 block">
-          <span className="text-muted-foreground text-sm">チーム名（#{t.id}）</span>
-          <Input
-            value={t.name}
-            onChange={(e) =>
-              setTeamNames((rows) =>
-                rows.map((r) => (r.id === t.id ? { ...r, name: sanitizeName(e.target.value) } : r)),
-              )
+        <div key={t.id} className="mt-3">
+          <label className="block">
+            <span className="text-muted-foreground text-sm">チーム名（#{t.id}）</span>
+            <Input
+              value={t.name}
+              onChange={(e) =>
+                setTeamNames((rows) =>
+                  rows.map((r) =>
+                    r.id === t.id ? { ...r, name: sanitizeName(e.target.value) } : r,
+                  ),
+                )
+              }
+              className="mt-1"
+              maxLength={NAME_MAX_LENGTH}
+              aria-label={`チーム名 #${t.id}`}
+            />
+          </label>
+          <TeamColorField
+            teamId={t.id}
+            name={t.name}
+            color={t.color}
+            onChange={(color) =>
+              setTeamNames((rows) => rows.map((r) => (r.id === t.id ? { ...r, color } : r)))
             }
-            className="mt-1"
-            maxLength={NAME_MAX_LENGTH}
-            aria-label={`チーム名 #${t.id}`}
           />
-        </label>
+        </div>
       ))}
       {/* 換算値をここに置かない理由を、画面にも書いておく */}
       <p className="text-muted-foreground mt-2 text-xs">
@@ -554,6 +569,10 @@ function describeChange(change: Change, teamName: (id: number) => string): strin
       return `リーグ名: 「${change.before}」→「${change.after}」`;
     case "teamName":
       return `チーム名: 「${change.before}」→「${change.after}」`;
+    case "teamColor":
+      return change.after === null
+        ? `${teamName(change.teamId)}の色: 消す（今は ${change.before ?? "未設定"}）`
+        : `${teamName(change.teamId)}の色: ${change.before ?? "未設定"} → ${change.after}`;
     case "rename":
       return `#${change.memberId} の名前: 「${change.before}」→「${change.after}」`;
     case "team":

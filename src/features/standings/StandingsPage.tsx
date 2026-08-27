@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
+import { TeamBadge } from "@/components/TeamBadge";
 import { useLeague } from "@/lib/league-context";
 import { useNewGameSheet } from "@/lib/new-game-sheet";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
@@ -54,6 +55,11 @@ export function StandingsPage() {
   );
   const teamNameOf = useCallback(
     (id: number) => teams.find((t) => t.id === id)?.name ?? `#${id}`,
+    [teams],
+  );
+  /** チームの色。未設定・知らない id は null（＝ハイライトしない） */
+  const colorOf = useCallback(
+    (id: number) => teams.find((t) => t.id === id)?.color ?? null,
     [teams],
   );
 
@@ -126,7 +132,9 @@ export function StandingsPage() {
                   key={t.teamId}
                   className="border-border flex justify-between rounded-lg border p-3"
                 >
-                  <span className="font-medium">{teamNameOf(t.teamId)}</span>
+                  <TeamBadge color={colorOf(t.teamId)} className="font-medium">
+                    {teamNameOf(t.teamId)}
+                  </TeamBadge>
                   <span className="tabular-nums">
                     {fmtPt(t.totalPt)}pt
                     <span className="text-muted-foreground ml-2 text-xs">{t.gameCount}半荘</span>
@@ -157,11 +165,12 @@ export function StandingsPage() {
                 <span className="w-4 shrink-0 text-center text-xs" aria-hidden="true">
                   {m.gameCount === 0 ? "" : (MEDALS[displayRank[i] as number] ?? "")}
                 </span>
-                <Link
-                  to={`/leagues/${leagueId}/members/${m.memberId}`}
-                  className="flex-1 underline"
-                >
-                  {nameOf(m.memberId)}
+                {/* 色は**名前だけ**に敷く。行全体に敷くと、10行並んだときに
+                    画面の大半が色になって pt の数字が読みにくくなる（実測して決めた） */}
+                <Link to={`/leagues/${leagueId}/members/${m.memberId}`} className="flex-1 min-w-0">
+                  <TeamBadge color={colorOf(roster.get(m.memberId) ?? -1)} className="underline">
+                    {nameOf(m.memberId)}
+                  </TeamBadge>
                 </Link>
                 <span className="shrink-0 tabular-nums">{fmtPt(m.totalPt)}pt</span>
                 <span className="text-muted-foreground w-12 shrink-0 text-right text-xs whitespace-nowrap tabular-nums">

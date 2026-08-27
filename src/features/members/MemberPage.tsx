@@ -1,6 +1,7 @@
 import { lazy, Suspense, useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { buildAxis, buildGameOrder, toSeries } from "@/features/standings/chart-rows";
+import { TeamBadge } from "@/components/TeamBadge";
 import { useLeague } from "@/lib/league-context";
 import { useNewGameSheet } from "@/lib/new-game-sheet";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
@@ -76,8 +77,7 @@ export function MemberPage() {
     );
   }
 
-  const teamName =
-    member === undefined ? undefined : teams.find((t) => t.id === roster.get(member.id))?.name;
+  const team = member === undefined ? undefined : teams.find((t) => t.id === roster.get(member.id));
   const rows: [string, string][] = [
     ["半荘数", `${me.gameCount}`],
     ["合計pt", `${fmtPt(me.totalPt)}pt`],
@@ -97,8 +97,11 @@ export function MemberPage() {
     <section>
       <div className="flex items-baseline gap-2">
         <h2 className="text-xl font-bold">{memberName}</h2>
-        {teamName === undefined ? null : (
-          <span className="text-muted-foreground text-sm">{teamName}</span>
+        {team === undefined ? null : (
+          // 名前ではなくチーム名の方に敷く。個人名を塗ると見出しが主張しすぎる
+          <TeamBadge color={team.color} className="text-muted-foreground text-sm">
+            {team.name}
+          </TeamBadge>
         )}
       </div>
 

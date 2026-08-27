@@ -16,6 +16,7 @@ import { EditGamePage } from "@/features/games/EditGamePage";
 import { GamesPage } from "@/features/games/GamesPage";
 import { NewGamePage } from "@/features/games/NewGamePage";
 import { MemberPage } from "@/features/members/MemberPage";
+import { MembersPage } from "@/features/members/MembersPage";
 import { AdminPage } from "@/features/admin/AdminPage";
 import { RulesPage } from "@/features/rules/RulesPage";
 import { ScoresPage } from "@/features/scores/ScoresPage";
@@ -55,6 +56,17 @@ function HeaderLink({
   );
 }
 
+/**
+ * ヘッダのパスコードボタンのラベル。**1か所で持つ**。
+ *
+ * もとは「パスコード」だったが、320px でメンバーを足すと**リーグ名が 23px まで
+ * 潰れて1文字も読めなくなった**ので、短い語にして 62px を確保した
+ * （「2026 合宿」なら「2026 合」まで見える。実測）。
+ * `aria-label` は「書き込みパスコードの設定」のままなので読み上げは変わらない。
+ * 「パスコード」に戻したくなったらここだけ直す（ただしリーグ名は 23px に戻る）。
+ */
+const PASSCODE_LABEL = "設定";
+
 function Header() {
   const { league } = useLeague();
   const { leagueId } = useParams();
@@ -80,13 +92,16 @@ function Header() {
           <HeaderLink to={`/leagues/${leagueId}/yaku`} active={pathname.endsWith("/yaku")}>
             役
           </HeaderLink>
+          <HeaderLink to={`/leagues/${leagueId}/members`} active={pathname.endsWith("/members")}>
+            メンバー
+          </HeaderLink>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setPasscodeOpen(true)}
             aria-label="書き込みパスコードの設定"
           >
-            パスコード
+            {PASSCODE_LABEL}
           </Button>
         </div>
       </div>
@@ -145,6 +160,22 @@ function NavItem({
  * - `pb-[env(safe-area-inset-bottom)]` で iPhone のホームインジケータを避ける。
  *   高さではなく padding に入れているので、バーの背景は画面の下端まで伸びる。
  * - `100vh` / `h-screen` は使わない（iOS Safari でアドレスバーの分ずれる）。
+ *
+ * ★ **ここに4つ目のリンクを足さないこと。** 3列 grid の左右は `1fr` なので、
+ *   中央のリンク群が広がると**左右の列が潰れ、`shrink-0` の「登録」ボタンが
+ *   列からはみ出して、最後のリンクの右端に重なる**。実測（T30）:
+ *
+ *     「メンバー」を足す  320px -7px / 360px -6px / 375px -3px / 390px +5px
+ *     「名簿」を足す      320px -5px / 344px -5px / 360px +3px
+ *
+ *   4文字だと**現行 iPhone SE（375px）でも右端 3px が押せない**。gap を 8px まで
+ *   詰めても、ラベルを短くしても、`px` を詰めても隙間は −6px から動かない
+ *   （原因はラベルの長さではなく、ボタンの列が潰れることなので）。
+ *
+ * ★ **中心のずれ 0 は「入っている」の証拠にならない。** 左右の `1fr` が均等に
+ *   潰れるところまでは対称が保たれ、**ボタンがはみ出す分だけが片側に寄る**ので、
+ *   中央寄せは崩れていないのに右端だけが欠ける。見た目では気づけない。
+ *   足すかどうかを測るときは、**リンク群の右端と「登録」ボタンの左端の隙間**を見ること。
  */
 function BottomNav({ onOpenNew }: { onOpenNew: (() => void) | null }) {
   const { leagueId } = useParams();
@@ -317,6 +348,14 @@ export function App() {
           element={
             <LeagueLayout>
               <EditGamePage />
+            </LeagueLayout>
+          }
+        />
+        <Route
+          path="/leagues/:leagueId/members"
+          element={
+            <LeagueLayout>
+              <MembersPage />
             </LeagueLayout>
           }
         />

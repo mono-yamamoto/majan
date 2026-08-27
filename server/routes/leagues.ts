@@ -44,7 +44,7 @@ leagues.get("/api/leagues/:id", async (c) => {
   >([
     db.prepare("SELECT * FROM leagues WHERE id = ?1").bind(leagueId),
     db
-      .prepare("SELECT id, league_id, name FROM teams WHERE league_id = ?1 ORDER BY id")
+      .prepare("SELECT id, league_id, name, color FROM teams WHERE league_id = ?1 ORDER BY id")
       .bind(leagueId),
     db
       .prepare(
@@ -90,7 +90,7 @@ leagues.get("/api/leagues/:id", async (c) => {
       ...toLeagueRule(league),
       createdAt: league.created_at,
     },
-    teams: (teamRes.results as TeamRow[]).map((t) => ({ id: t.id, name: t.name })),
+    teams: (teamRes.results as TeamRow[]).map((t) => ({ id: t.id, name: t.name, color: t.color })),
     members: (memberRes.results as (MemberRow & { team_id: number })[]).map((m) => ({
       id: m.id,
       name: m.name,

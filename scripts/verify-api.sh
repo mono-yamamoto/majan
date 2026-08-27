@@ -590,6 +590,47 @@ ROSTER 400 'roster: 他リーグのチームへ移す'   '{"changes":[{"kind":"t
 ROSTER 400 'roster: 他リーグのチームへ追加'   '{"changes":[{"kind":"add","memberId":51,"name":"新","teamId":91}]}'
 check "400 のあと members が増えていない" "$(Q "SELECT COUNT(*) AS n FROM members;")" "$members_at_roster"
 
+# --- チームの色（CSS に流れ込むので名前より厳しく見る） ---
+# React の style={{backgroundColor: x}} は文字列を素通しする。ここが唯一の防波堤。
+COLOR() { printf '{"changes":[{"kind":"teamColor","teamId":1,"before":null,"after":%s}]}' "$1"; }
+# Q は JSON の null を Python の None として返す。色は NULL を取るので、そこを "null" に均す
+color_of() { local v; v=$(Q "SELECT color FROM teams WHERE id=$1;"); [ "$v" = "None" ] && echo null || echo "$v"; }
+check "はじめは色が未設定"                "$(color_of 1)" "null"
+ROSTER 400 'roster: 色が3桁 #fff'         "$(COLOR '"#fff"')"
+ROSTER 400 'roster: 色が8桁 #ff0000ff'    "$(COLOR '"#ff0000ff"')"
+ROSTER 400 'roster: 色が rgb()'           "$(COLOR '"rgb(255,0,0)"')"
+ROSTER 400 'roster: 色が hsl()'           "$(COLOR '"hsl(0,100%,50%)"')"
+ROSTER 400 'roster: 色が名前付き red'     "$(COLOR '"red"')"
+ROSTER 400 'roster: 色が var(--x)'        "$(COLOR '"var(--destructive)"')"
+ROSTER 400 'roster: 色が javascript:'     "$(COLOR '"javascript:alert(1)"')"
+ROSTER 400 'roster: 色に ; を混ぜる'      "$(COLOR '"#ff0000;background:url(x)"')"
+ROSTER 400 'roster: 色が空文字（消すのは null の1通りだけ）' "$(COLOR '""')"
+ROSTER 400 'roster: 色が # だけ'          "$(COLOR '"#"')"
+ROSTER 400 'roster: 色に 16進でない文字'  "$(COLOR '"#gg0000"')"
+ROSTER 400 'roster: 色が数値'             "$(COLOR '16711680')"
+check "400 のあいだ色は未設定のまま"      "$(color_of 1)" "null"
+# 前後の空白と大文字は「弾く」ではなく「直して通す」
+ROSTER 200 'roster: 色に前後の空白（trim して通す）' "$(COLOR '"  #ff0000  "')"
+check "trim して保存されている"           "$(Q "SELECT color FROM teams WHERE id=1;")" "#ff0000"
+ROSTER 200 'roster: 大文字は小文字に直して通す' '{"changes":[{"kind":"teamColor","teamId":1,"before":"#ff0000","after":"#00FF00"}]}'
+check "小文字で保存されている"            "$(Q "SELECT color FROM teams WHERE id=1;")" "#00ff00"
+# before は正規化して突き合わせる（同じ色なのに 409 にしない）
+ROSTER 200 'roster: before が大文字でも通る' '{"changes":[{"kind":"teamColor","teamId":1,"before":"#00FF00","after":"#0000ff"}]}'
+check "色が変わっている"                  "$(Q "SELECT color FROM teams WHERE id=1;")" "#0000ff"
+ROSTER 409 'roster: before が食い違えば 409' '{"changes":[{"kind":"teamColor","teamId":1,"before":"#123456","after":"#abcdef"}]}'
+check "409 のあと色は変わっていない"      "$(Q "SELECT color FROM teams WHERE id=1;")" "#0000ff"
+ROSTER 400 'roster: 他リーグの teamId に色' '{"changes":[{"kind":"teamColor","teamId":91,"before":null,"after":"#ff0000"}]}'
+check "他リーグのチームは無色のまま"      "$(color_of 91)" "null"
+# null で消せる。名前（空は 400）とは扱いが逆であることを固定する
+ROSTER 200 'roster: after が null なら色を消す' '{"changes":[{"kind":"teamColor","teamId":1,"before":"#0000ff","after":null}]}'
+check "消えて NULL に戻っている"          "$(color_of 1)" "null"
+# DB 側の CHECK も効いていること（アプリを通さない経路の防衛線）
+check "DB の CHECK が大文字を弾く" \
+  "$(W d1 execute majan --local --persist-to "$PERSIST" --command "UPDATE teams SET color='#FF0000' WHERE id=1;" 2>&1 | grep -ciE 'CHECK constraint failed' | tr -d ' ')" "1"
+check "DB の CHECK が rgb() を弾く" \
+  "$(W d1 execute majan --local --persist-to "$PERSIST" --command "UPDATE teams SET color='rgb(255,0,0)' WHERE id=1;" 2>&1 | grep -ciE 'CHECK constraint failed' | tr -d ' ')" "1"
+check "CHECK に弾かれたあとも色は未設定"  "$(color_of 1)" "null"
+
 # --- 正常系 ---
 ROSTER 200 'roster: リーグ名・チーム名・改名・移動をまとめて' "{\"changes\":[
   {\"kind\":\"leagueName\",\"before\":\"${league_before}\",\"after\":\"2027 春\"},
