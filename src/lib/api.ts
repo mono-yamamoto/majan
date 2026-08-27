@@ -8,6 +8,7 @@
  * 分けているのは、呼び出し側が分岐できるようにするため。
  */
 
+import type { Change } from "./roster-changes";
 import type { ValidationError } from "./validation";
 
 export type ApiOk<T> = { ok: true; data: T };
@@ -23,6 +24,12 @@ export type ApiFailure =
   | { ok: false; kind: "serverError"; status: number; message: string }
   /** 対象が見つからない（削除済みの可能性） */
   | { ok: false; kind: "notFound"; status: 404; message: string }
+  /**
+   * 送った内容が、いまの DB の状態と噛み合わない。
+   * 名簿の変更で、開いている間に裏で名簿が変わったとき。
+   * **読み込み直せば直る**ので、他の 4xx とは扱いが違う。
+   */
+  | { ok: false; kind: "conflict"; status: 409; messages: string[] }
   /** 入力が大きすぎる */
   | { ok: false; kind: "tooLarge"; status: 413; message: string }
   /** 形の不正など。本来フロントからは出ないはずで、出たら実装バグ */
@@ -76,6 +83,16 @@ function toFailure(status: number, body: unknown): ApiFailure {
 
   if (status === 400 && isRecord(body) && Array.isArray(body.errors)) {
     return { ok: false, kind: "validation", status: 400, errors: body.errors as ValidationError[] };
+  }
+  if (status === 409 && isRecord(body) && Array.isArray(body.conflicts)) {
+    return {
+      ok: false,
+      kind: "conflict",
+      status: 409,
+      messages: (body.conflicts as { message?: unknown }[]).map((x) =>
+        typeof x.message === "string" ? x.message : "内容が変わっています",
+      ),
+    };
   }
   if (status === 401) {
     return {
@@ -228,3 +245,17 @@ export const deleteGame = (
   passcode: string | null,
 ): Promise<ApiResult<{ id: number; deleted: true }>> =>
   writeOnce("PATCH", `/api/games/${gameId}/deleted`, { deleted: true }, passcode);
+
+/**
+ * 名簿の変更をまとめて適用する（運営メニュー）。
+ *
+ * 差分をそのまま送る。1つでも現在の DB と食い違えば、サーバは 409 を返して
+ * **何も適用しない**（一部だけ通ると、画面が出していた「変更後の人数」と
+ * 実際の結果がずれる）。
+ */
+export const applyRosterChanges = (
+  leagueId: number,
+  changes: Change[],
+  passcode: string | null,
+): Promise<ApiResult<{ applied: number }>> =>
+  writeOnce("POST", `/api/leagues/${leagueId}/roster`, { changes }, passcode);

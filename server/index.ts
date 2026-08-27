@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { games } from "./routes/games";
 import { leagues } from "./routes/leagues";
+import { roster } from "./routes/roster";
 
 export type Bindings = {
   DB: D1Database; // wrangler.jsonc の d1_databases で注入される
@@ -14,5 +15,6 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 
 app.route("/", leagues);
 app.route("/", games);
+app.route("/", roster);
 
 export default app;

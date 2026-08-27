@@ -31,28 +31,6 @@ export type NewRow = {
 };
 
 /**
- * SQL の文字列リテラルにする。
- *
- * SQLite の文字列リテラルでエスケープが要るのは **シングルクォートだけ**で、
- * `''` と重ねる。バックスラッシュは特別扱いされない（`\` はただの文字）。
- * 名前に `'` が入るのは普通にありうる（オコナー等）。
- */
-export function sqlString(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
-}
-
-/**
- * シェルのシングルクォート文字列にする。
- *
- * `--command "..."` だと名前に含まれる `"` や `$` や `` ` `` が展開されてしまう。
- * シングルクォートで囲み、中の `'` を `'\''`（閉じる→エスケープした'→開き直す）に
- * すれば、**どんな中身でもそのまま渡せる**。
- */
-export function shellSingleQuote(value: string): string {
-  return `'${value.replaceAll("'", String.raw`'\''`)}'`;
-}
-
-/**
  * 提案する member_id。**穴は埋めず、既知の最大 + 1** にする。
  *
  * 画面が知っているのは `GET /api/leagues/:id` が返す名簿（= league_members を
@@ -192,58 +170,4 @@ export function diffNames(
   }
 
   return changes;
-}
-
-/** 1つの変更を SQL 文にする。末尾のセミコロンまで含める */
-export function statementFor(change: Change, leagueId: number): string[] {
-  switch (change.kind) {
-    case "leagueName":
-      return [`UPDATE leagues SET name = ${sqlString(change.after)} WHERE id = ${leagueId};`];
-    case "teamName":
-      return [`UPDATE teams SET name = ${sqlString(change.after)} WHERE id = ${change.teamId};`];
-    case "rename":
-      return [
-        `UPDATE members SET name = ${sqlString(change.after)} WHERE id = ${change.memberId};`,
-      ];
-    case "team":
-      return [
-        `UPDATE league_members SET team_id = ${change.after}` +
-          ` WHERE league_id = ${leagueId} AND member_id = ${change.memberId};`,
-      ];
-    case "remove":
-      return [
-        `DELETE FROM league_members WHERE league_id = ${leagueId} AND member_id = ${change.memberId};`,
-      ];
-    case "add":
-      return [
-        `INSERT INTO members (id, name) VALUES (${change.memberId}, ${sqlString(change.name)});`,
-        `INSERT INTO league_members (league_id, member_id, team_id)` +
-          ` VALUES (${leagueId}, ${change.memberId}, ${change.teamId});`,
-      ];
-  }
-}
-
-/** 変更後に必ず見る確認クエリ（usage.mdx「変更後に必ず確認する」と同じもの） */
-export function confirmQuery(leagueId: number): string {
-  return (
-    "SELECT t.name AS team, COUNT(*) AS n, SUM(t.league_id <> lm.league_id) AS wrong_league\n" +
-    "FROM league_members lm JOIN teams t ON t.id = lm.team_id\n" +
-    `WHERE lm.league_id = ${leagueId} GROUP BY t.id;`
-  );
-}
-
-/**
- * 貼り付ける用の SQL 全体。
- *
- * 追加は members → league_members の順でないと外部キーで落ちるので、
- * 並び順は statementFor の返り値の順をそのまま保つ。
- */
-export function buildScript(changes: Change[], leagueId: number): string {
-  return changes.flatMap((change) => statementFor(change, leagueId)).join("\n");
-}
-
-/** wrangler で流す形。1コマンドに複数文を `;` で区切って渡せる */
-export function buildWranglerCommand(changes: Change[], leagueId: number): string {
-  const sql = buildScript(changes, leagueId);
-  return `wrangler d1 execute majan --remote --command ${shellSingleQuote(sql)}`;
 }

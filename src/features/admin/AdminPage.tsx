@@ -1,17 +1,21 @@
 /**
- * 運営ページ。**読み取り専用**で、名簿を編集した結果の SQL を表示するだけ。
- * 実行はしない（決定#11: 運営系テーブルへの書き込みAPIは作らない）。
+ * 運営ページ。名簿・チーム名・リーグ名を編集して、まとめて反映する。
  *
- * ★ パスコードで隠しているが、これは**セキュリティ境界ではない**。
- *   パスコードは localStorage にあるだけでサーバー側のセッションが無いので、
- *   DevTools を開けば誰でも見られる。
+ * 現状と編集後の差分（`Change[]`）を作り、`POST /api/leagues/:id/roster` に
+ * そのまま送る。差分の作り方は `src/lib/roster-changes.ts`（サーバと共有）。
  *
- *   それで構わないのは、このページが出すのが `GET /api/leagues/:id` で
- *   **既に誰でも取得できるデータ**（member_id・名前・チーム）だけだから。
- *   新しく秘密になるものは無い。
+ * ★ パスコードの位置づけが2つある。混ぜないこと。
  *
- *   目的は「**閲覧専用の10人に余計な導線を出さない**」ことだけ。
+ *   **画面を開くとき**のパスコードは**セキュリティ境界ではない**。
+ *   localStorage にあるだけでサーバー側のセッションが無く、DevTools を開けば
+ *   誰でも見られる。それで構わないのは、この画面が出すのが
+ *   `GET /api/leagues/:id` で**既に誰でも取得できるデータ**だけだから。
+ *   目的は「閲覧専用の10人に余計な導線を出さない」ことだけで、
  *   「認証されている」と読まないこと。
+ *
+ *   **反映するとき**のパスコードは本物の境界。半荘の登録と同じ
+ *   `X-Passcode` をサーバが `requirePasscode` で検証する。
+ *   画面の開閉を突破しても、書き込みは通らない。
  *
  * 手順は Guidebook の「メンバー・チームを変更したいとき」と同じ。
  * 食い違ったら仕様書側を直すこと。
@@ -21,20 +25,20 @@ import { useMemo, useState } from "react";
 import { PasscodeDialog } from "@/components/PasscodeDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useLeague } from "@/lib/league-context";
+import { describeFailure, useLeague } from "@/lib/league-context";
 import { loadPasscode } from "@/lib/passcode";
+import { applyRosterChanges } from "@/lib/api";
 import {
-  buildScript,
-  buildWranglerCommand,
-  confirmQuery,
   diffNames,
   diffRoster,
   nextMemberId,
   sanitizeName,
+  type Change,
   type EditedRow,
   type NewRow,
   type RosterRow,
-} from "./sql";
+} from "@/lib/roster-changes";
+import { useWriteAction } from "@/lib/use-write-action";
 
 export function AdminPage() {
   // 初期値は描画時に1回だけ読む。エフェクトで後から差し替えると、
@@ -47,7 +51,7 @@ export function AdminPage() {
       <section>
         <h2 className="text-xl font-bold">運営メニュー</h2>
         <p className="text-muted-foreground mt-4 text-sm">
-          名簿とチーム分けを変更する SQL を作るページです。運営以外は使いません。
+          リーグ名・チーム名・名簿を変更するページです。運営以外は使いません。
         </p>
         <Button className="mt-4" onClick={() => setAskOpen(true)}>
           パスコードを入れて開く
@@ -62,11 +66,41 @@ export function AdminPage() {
     );
   }
 
-  return <AdminBody />;
+  return <AdminUnlocked />;
 }
 
-function AdminBody() {
-  const { league, teams, members, games } = useLeague();
+/**
+ * サーバから来た名簿が変わったら、編集状態を作り直す。
+ *
+ * 編集欄（名前・チーム・追加行）は useState の初期値で作るので、
+ * `reload()` でデータが変わっても**そのまま残る**。反映したあとも
+ * 「まだ追加していない」と表示され続け、もう一度押すと 409 になる（実測）。
+ *
+ * key を変えて丸ごと作り直すのが一番確実。編集途中だったものは消えるが、
+ * それは**古い状態を前提に作った差分**なので、残す方が危ない
+ * （そのまま送ると、もう当たっている before を送ることになる）。
+ */
+function AdminUnlocked() {
+  const { league, teams, members } = useLeague();
+  // 「反映しました」は作り直しの外に置く。中に置くと、反映 → 再取得 → 作り直しで
+  // 成功メッセージごと消え、押したのに何も言わない画面になる
+  const [applied, setApplied] = useState<number | null>(null);
+  const dataKey = [
+    league.name,
+    teams.map((t) => `${t.id}:${t.name}`).join(","),
+    members.map((m) => `${m.id}:${m.name}:${m.teamId}`).join(","),
+  ].join("|");
+  return <AdminBody key={dataKey} applied={applied} onApplied={setApplied} />;
+}
+
+function AdminBody({
+  applied,
+  onApplied,
+}: {
+  applied: number | null;
+  onApplied: (n: number | null) => void;
+}) {
+  const { league, teams, members, games, reload } = useLeague();
 
   const current: RosterRow[] = useMemo(
     () => members.map((m) => ({ memberId: m.id, name: m.name, teamId: m.teamId })),
@@ -80,7 +114,17 @@ function AdminBody() {
   const [leagueName, setLeagueName] = useState(league.name);
   const [teamNames, setTeamNames] = useState(() => teams.map((t) => ({ id: t.id, name: t.name })));
   const [added, setAdded] = useState<NewRow[]>([]);
-  const [copied, setCopied] = useState<string | null>(null);
+
+  const apply = useWriteAction<Change[], { applied: number }>(
+    (changes, passcode) => applyRosterChanges(league.id, changes, passcode),
+    (data) => {
+      onApplied(data.applied);
+      // 反映後は取り直す。画面が古い名簿を映したままだと、
+      // 次の変更が「もう当たっている before」を送ることになる
+      reload();
+    },
+  );
+  const applyError = apply.failure === null ? null : describeFailure(apply.failure);
 
   const changes = useMemo(
     () => [
@@ -90,8 +134,6 @@ function AdminBody() {
     ],
     [league.name, teams, leagueName, teamNames, current, edited, added],
   );
-  const script = useMemo(() => buildScript(changes, league.id), [changes, league.id]);
-  const command = useMemo(() => buildWranglerCommand(changes, league.id), [changes, league.id]);
 
   // 半荘に1度でも出た人。所属を外すと過去の半荘が編集できなくなる
   const played = useMemo(() => {
@@ -104,8 +146,10 @@ function AdminBody() {
   // 画面が事実と違うことを言うことになる
   const teamName = (id: number) => teamNames.find((t) => t.id === id)?.name.trim() || `#${id}`;
 
-  const setRow = (memberId: number, patch: Partial<EditedRow>) =>
+  const setRow = (memberId: number, patch: Partial<EditedRow>) => {
+    onApplied(null);
     setEdited((rows) => rows.map((r) => (r.memberId === memberId ? { ...r, ...patch } : r)));
+  };
 
   // 「画面が知っている id」。名簿から外した人や別リーグの人は含まれない
   const knownIds = useMemo(
@@ -113,15 +157,7 @@ function AdminBody() {
     [members, added],
   );
 
-  const copy = (label: string, text: string) => {
-    void navigator.clipboard.writeText(text).then(
-      () => setCopied(label),
-      // クリップボードは権限や http で失敗する。押したのに何も起きない、を避ける
-      () => setCopied("失敗"),
-    );
-  };
-
-  // 変更後の人数。SQL を流す前に 5-5 のままかを見られるようにする
+  // 変更後の人数。反映する前に 5-5 のままかを見られるようにする
   const counts = useMemo(() => {
     const map = new Map<number, number>(teams.map((t) => [t.id, 0]));
     for (const row of edited) {
@@ -143,9 +179,9 @@ function AdminBody() {
       <h2 className="text-xl font-bold">運営メニュー</h2>
 
       <p className="text-muted-foreground mt-2 text-sm">
-        名簿を編集すると、下に流す SQL が出ます。このページは<strong>実行しません</strong>。
-        コピーして Cloudflare のダッシュボード（D1 → majan → Console）か <code>wrangler</code>{" "}
-        で流してください。
+        名簿を編集すると、下に変更内容が出ます。
+        <strong>「反映する」を押すまで DB は変わりません</strong>
+        。反映にはパスコードが必要です。
       </p>
 
       <h3 className="mt-6 font-bold">リーグとチームの名前</h3>
@@ -284,12 +320,13 @@ function AdminBody() {
         type="button"
         variant="ghost"
         className="mt-2"
-        onClick={() =>
+        onClick={() => {
+          onApplied(null);
           setAdded((rows) => [
             ...rows,
             { memberId: nextMemberId(knownIds), name: "", teamId: teams[0]?.id ?? 1 },
-          ])
-        }
+          ]);
+        }}
       >
         + 追加する
       </Button>
@@ -297,10 +334,10 @@ function AdminBody() {
         // 画面から見えるのは「いまリーグに所属している人」だけ。名簿から外した人や
         // 別リーグにしかいない人の id は分からないので、提案が当たらないことがある
         <p className="text-muted-foreground mt-2 text-xs">
-          id は分かっている中で一番大きい番号の次を提案しています。流したときに{" "}
-          <code>UNIQUE constraint failed: members.id</code> が出たら、その id は
-          別の人が使っています。SQL の id を空いている番号に変えて流し直してください。
-          <strong>失敗した場合は1行も書き込まれていない</strong>ので、DB は壊れていません。
+          id は分かっている中で一番大きい番号の次を提案しています。名簿から外した人や 別リーグの人の
+          id は画面から見えないので、まれに既に使われていることがあります。 その場合は
+          <strong>反映が断られ、1件も書き込まれません</strong>。
+          読み込み直せば、空いている番号を提案し直します。
         </p>
       ) : null}
 
@@ -338,80 +375,75 @@ function AdminBody() {
         </p>
       ) : null}
 
-      <h3 className="mt-6 font-bold">流す SQL</h3>
+      <h3 className="mt-6 font-bold">反映する内容</h3>
       {changes.length === 0 ? (
         <p className="text-muted-foreground mt-2 text-sm">
-          まだ変更がありません。上で名前かチームを変えると、ここに SQL が出ます。
+          まだ変更がありません。上で名前かチームを変えると、ここに出ます。
         </p>
       ) : (
         <>
-          <SqlBlock
-            title="ダッシュボードに貼る"
-            text={script}
-            copied={copied === "sql"}
-            onCopy={() => copy("sql", script)}
-          />
-          <SqlBlock
-            title="コマンドで流す"
-            text={command}
-            copied={copied === "cmd"}
-            onCopy={() => copy("cmd", command)}
-          />
+          {/* 押す前に、何が変わるかを必ず見せる。SQL を挟まなくなったぶん、
+              「押したら何が起きるか」を確かめる場がここしか無くなった */}
+          <ul className="border-border mt-2 space-y-1 rounded-lg border p-3 text-sm">
+            {changes.map((change, i) => (
+              <li key={`${change.kind}-${i}`}>{describeChange(change, teamName)}</li>
+            ))}
+          </ul>
+          <Button
+            type="button"
+            className="mt-4 w-full"
+            disabled={apply.pending}
+            onClick={() => apply.run(changes)}
+          >
+            {apply.pending ? "反映中…" : `この内容で反映する（${changes.length}件）`}
+          </Button>
         </>
       )}
 
-      <h3 className="mt-6 font-bold">流したあとに必ず確認する</h3>
-      <p className="text-muted-foreground mt-1 text-sm">
-        各チームの人数と、<code>wrong_league</code> が 0 であることを見ます。
-      </p>
-      <SqlBlock
-        title="確認クエリ"
-        text={confirmQuery(league.id)}
-        copied={copied === "check"}
-        onCopy={() => copy("check", confirmQuery(league.id))}
-      />
-
-      {copied === "失敗" ? (
-        <p className="text-destructive mt-2 text-sm">
-          コピーできませんでした。上のテキストを選んで手でコピーしてください。
+      {applyError === null ? null : (
+        <p className="border-destructive text-destructive mt-4 rounded-lg border p-3 text-sm">
+          {applyError}
         </p>
-      ) : null}
+      )}
+      {applied === null ? null : (
+        <p className="border-border mt-4 rounded-lg border p-3 text-sm">
+          {applied}件を反映しました。
+        </p>
+      )}
 
       <p className="text-muted-foreground mt-6 text-xs">
-        DB を直接変えたら、テンプレート側も同じ内容に直しておくと、あとで流し直したときに
+        ここで変えたら、テンプレート側も同じ内容に直しておくと、あとで流し直したときに
         古い内容へ戻りません。メンバーと所属は <code>db/roster.local.sql</code>、
         <strong>
           リーグ名とチーム名は <code>db/seed.local.sql</code>
         </strong>{" "}
         です。
       </p>
+
+      <PasscodeDialog
+        open={apply.passcodeOpen}
+        onOpenChange={apply.setPasscodeOpen}
+        onSaved={apply.onPasscodeSaved}
+        message={apply.passcodeMessage}
+      />
     </section>
   );
 }
 
-function SqlBlock({
-  title,
-  text,
-  copied,
-  onCopy,
-}: {
-  title: string;
-  text: string;
-  copied: boolean;
-  onCopy: () => void;
-}) {
-  return (
-    <div className="mt-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground text-sm">{title}</span>
-        <Button type="button" variant="ghost" className="shrink-0" onClick={onCopy}>
-          {copied ? "コピーしました" : "コピー"}
-        </Button>
-      </div>
-      {/* 長い SQL は横に溢れさせず、この中だけでスクロールさせる */}
-      <pre className="border-border bg-muted/40 mt-1 overflow-x-auto rounded-lg border p-3 text-xs">
-        {text}
-      </pre>
-    </div>
-  );
+/** 1つの変更を、押す前に読んで分かる日本語にする */
+function describeChange(change: Change, teamName: (id: number) => string): string {
+  switch (change.kind) {
+    case "leagueName":
+      return `リーグ名: 「${change.before}」→「${change.after}」`;
+    case "teamName":
+      return `チーム名: 「${change.before}」→「${change.after}」`;
+    case "rename":
+      return `#${change.memberId} の名前: 「${change.before}」→「${change.after}」`;
+    case "team":
+      return `${change.name}: ${teamName(change.before)} → ${teamName(change.after)}`;
+    case "remove":
+      return `${change.name}: ${teamName(change.teamId)} から名簿を外す`;
+    case "add":
+      return `#${change.memberId} ${change.name} を ${teamName(change.teamId)} に追加`;
+  }
 }

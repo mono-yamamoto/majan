@@ -39,6 +39,9 @@ export function describeFailure(failure: ApiFailure): string {
       return "サーバーが一時的に応答していません。しばらくしてからもう一度お試しください";
     case "notFound":
       return "対象が見つかりません（削除済みの可能性があります）";
+    case "conflict":
+      // 読み込み直せば直る種類なので、それを言う
+      return `裏で名簿が変わっています。読み込み直してください（${failure.messages.join(" / ")}）`;
     case "tooLarge":
       return "入力が大きすぎます";
     default:

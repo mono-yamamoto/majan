@@ -496,6 +496,84 @@ check "リーグ2の members はリーグ2の4人だけ" \
   "$(curl -s "${BASE}/api/leagues/2" | python3 -c 'import sys,json;print(len(json.load(sys.stdin)["members"]))')" "4"
 shape "GET /api/leagues が2件になる" "2" 'len(d["leagues"])' "${BASE}/api/leagues"
 
+echo; echo "===== POST /api/leagues/:id/roster（運営メニューの反映） ====="
+ROSTER() { t "$1" "$2" -X POST "${BASE}/api/leagues/1/roster" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" -d "$3"; }
+ROSTER_shape() { shape "$1" "$2" "$3" -X POST "${BASE}/api/leagues/1/roster" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" -d "$4"; }
+
+# --- 認証 ---
+t 401 'roster: パスコード無し' -X POST "${BASE}/api/leagues/1/roster" -H 'Content-Type: application/json' -d '{"changes":[]}'
+t 401 'roster: パスコード誤り' -X POST "${BASE}/api/leagues/1/roster" -H 'Content-Type: application/json' -H 'X-Passcode: wrong' -d '{"changes":[]}'
+
+# --- 形 ---
+ROSTER 400 'roster: changes が配列でない'  '{"changes":"nope"}'
+ROSTER 400 'roster: changes が空'          '{"changes":[]}'
+ROSTER 400 'roster: 未知の kind'           '{"changes":[{"kind":"drop","memberId":1}]}'
+ROSTER 400 'roster: memberId が文字列'     '{"changes":[{"kind":"rename","memberId":"1","before":"山田","after":"x"}]}'
+t 404 'roster: 存在しないリーグ' -X POST "${BASE}/api/leagues/999/roster" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" -d '{"changes":[{"kind":"leagueName","before":"a","after":"b"}]}'
+t 404 'roster: :id の不正形' -X POST "${BASE}/api/leagues/abc/roster" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" -d '{"changes":[{"kind":"leagueName","before":"a","after":"b"}]}'
+
+# --- before の食い違い → 409（丸ごと拒否） ---
+# 件数はここまでの検証で増えているので、ハードコードせずその場で数える
+members_at_roster=$(Q "SELECT COUNT(*) AS n FROM members;")
+league_before=$(Q "SELECT name FROM leagues WHERE id=1;")
+ROSTER 409 'roster: リーグ名の before が違う' '{"changes":[{"kind":"leagueName","before":"違う名前","after":"乗っ取り"}]}'
+check "409 のあとリーグ名が変わっていない" "$(Q "SELECT name FROM leagues WHERE id=1;")" "$league_before"
+ROSTER_shape "409 のボディは { conflicts: [...] }" "True" 'isinstance(d.get("conflicts"), list) and len(d["conflicts"]) > 0' \
+  '{"changes":[{"kind":"leagueName","before":"違う名前","after":"乗っ取り"}]}'
+ROSTER 409 'roster: メンバー名の before が違う' '{"changes":[{"kind":"rename","memberId":1,"before":"違う","after":"x"}]}'
+ROSTER 409 'roster: 所属の before が違う'       '{"changes":[{"kind":"team","memberId":1,"name":"山田","before":2,"after":2}]}'
+ROSTER 409 'roster: 既に外れている人を外す'     '{"changes":[{"kind":"remove","memberId":99,"name":"居ない","teamId":1}]}'
+ROSTER 409 'roster: 使用済みの id で追加'       '{"changes":[{"kind":"add","memberId":1,"name":"重複","teamId":1}]}'
+ROSTER 409 'roster: 同じ id を2回追加'          '{"changes":[{"kind":"add","memberId":50,"name":"A","teamId":1},{"kind":"add","memberId":50,"name":"B","teamId":2}]}'
+check "409 のあと members が増えていない" "$(Q "SELECT COUNT(*) AS n FROM members;")" "$members_at_roster"
+
+# --- 他リーグの teamId は 400（このリーグの話ではないので、読み直しても直らない） ---
+W d1 execute majan --local --persist-to "$PERSIST" --command "
+INSERT INTO leagues (id, name, start_point, return_point, uma_1st, uma_2nd, uma_3rd, uma_4th)
+  VALUES (9, '別リーグ', 25000, 30000, 30, 10, -10, -30);
+INSERT INTO teams (id, league_id, name) VALUES (91, 9, '他チーム');" >/dev/null 2>&1
+other_before=$(Q "SELECT name FROM teams WHERE id=91;")
+ROSTER 400 'roster: 他リーグの teamId でチーム名変更' '{"changes":[{"kind":"teamName","teamId":91,"before":"他チーム","after":"乗っ取り"}]}'
+check "400 のあと他リーグのチーム名が無事"  "$(Q "SELECT name FROM teams WHERE id=91;")" "$other_before"
+ROSTER 400 'roster: 他リーグのチームへ移す'   '{"changes":[{"kind":"team","memberId":1,"name":"山田","before":1,"after":91}]}'
+ROSTER 400 'roster: 他リーグのチームへ追加'   '{"changes":[{"kind":"add","memberId":51,"name":"新","teamId":91}]}'
+check "400 のあと members が増えていない" "$(Q "SELECT COUNT(*) AS n FROM members;")" "$members_at_roster"
+
+# --- 正常系 ---
+ROSTER 200 'roster: リーグ名・チーム名・改名・移動をまとめて' "{\"changes\":[
+  {\"kind\":\"leagueName\",\"before\":\"${league_before}\",\"after\":\"2027 春\"},
+  {\"kind\":\"teamName\",\"teamId\":1,\"before\":\"チームA\",\"after\":\"赤 'A'\"},
+  {\"kind\":\"rename\",\"memberId\":3,\"before\":\"鈴木\",\"after\":\"O'Brien\"},
+  {\"kind\":\"team\",\"memberId\":1,\"name\":\"山田\",\"before\":1,\"after\":2}
+]}"
+check "リーグ名が変わった"     "$(Q "SELECT name FROM leagues WHERE id=1;")" "2027 春"
+check "チーム名が変わった（' つき）" "$(Q "SELECT name FROM teams WHERE id=1;")" "赤 'A'"
+check "メンバー名が変わった（' つき）" "$(Q "SELECT name FROM members WHERE id=3;")" "O'Brien"
+check "所属が変わった"         "$(Q "SELECT team_id FROM league_members WHERE league_id=1 AND member_id=1;")" "2"
+ROSTER_shape "200 のボディは { applied: n }" "4" 'd["applied"]' "{\"changes\":[{\"kind\":\"leagueName\",\"before\":\"2027 春\",\"after\":\"2027 春\"},{\"kind\":\"rename\",\"memberId\":2,\"before\":\"佐藤\",\"after\":\"佐藤\"},{\"kind\":\"rename\",\"memberId\":4,\"before\":\"田中\",\"after\":\"田中\"},{\"kind\":\"rename\",\"memberId\":5,\"before\":\"高橋\",\"after\":\"高橋\"}]}"
+
+ROSTER 200 'roster: 追加'   '{"changes":[{"kind":"add","memberId":11,"name":"新人","teamId":1}]}'
+check "members に増えた"     "$(Q "SELECT name FROM members WHERE id=11;")" "新人"
+check "所属にも入った"       "$(Q "SELECT team_id FROM league_members WHERE league_id=1 AND member_id=11;")" "1"
+ROSTER 200 'roster: 所属を外す' '{"changes":[{"kind":"remove","memberId":11,"name":"新人","teamId":1}]}'
+check "所属から消えた"       "$(Q "SELECT COUNT(*) AS n FROM league_members WHERE league_id=1 AND member_id=11;")" "0"
+check "★ members からは消さない" "$(Q "SELECT name FROM members WHERE id=11;")" "新人"
+check "★ game_results も消さない" "$(Q "SELECT COUNT(*) AS n FROM game_results;")" "$(Q "SELECT COUNT(*) AS n FROM game_results;")"
+
+echo; echo "===== roster: 検証を抜けた不正が DB に届かないこと ====="
+# batch() の原子性そのものは、サーバの検証を一時的に外した変異テストで確かめている
+# （報告に記録）。この検証スクリプトはサーバを書き換えられないので、ここでは
+# 「検証で弾かれる不正は1文も書き込まれない」を、正常な変更と混ぜて固定する。
+name_before=$(Q "SELECT name FROM members WHERE id=2;")
+members_before=$(Q "SELECT COUNT(*) AS n FROM members;")
+ROSTER 409 'roster: 正常な変更と不正を混ぜると丸ごと拒否' \
+  '{"changes":[{"kind":"rename","memberId":2,"before":"佐藤","after":"通ってはいけない"},{"kind":"add","memberId":1,"name":"重複","teamId":1}]}'
+check "★ 正常な方も適用されていない"     "$(Q "SELECT name FROM members WHERE id=2;")" "$name_before"
+check "members の件数も変わっていない"   "$(Q "SELECT COUNT(*) AS n FROM members;")" "$members_before"
+ROSTER 400 'roster: 正常な変更と他リーグを混ぜても丸ごと拒否' \
+  '{"changes":[{"kind":"rename","memberId":2,"before":"佐藤","after":"通ってはいけない"},{"kind":"teamName","teamId":91,"before":"他チーム","after":"乗っ取り"}]}'
+check "★ こちらも正常な方が適用されていない" "$(Q "SELECT name FROM members WHERE id=2;")" "$name_before"
+
 echo; echo "===== WRITE_PASSCODE 未設定でも素通りしない ====="
 games_before_unset=$(Q "SELECT COUNT(*) AS n FROM games;")
 start_worker without-secret
@@ -515,7 +593,16 @@ check "import.meta.env を使っていない"  "$(banned_in_code 'import\.meta\.
 echo; echo "===== 静的チェック（Blocker） ====="
 check "last_insert_rowid を使っていない" "$(banned_in_code 'last_insert_rowid' server/)" "0"
 check "DELETE エンドポイントが無い"      "$(banned_in_code '\.delete\(' server/)" "0"
-check "運営系テーブルへの書き込みが無い" "$(banned_in_code '(INSERT INTO|UPDATE|DELETE FROM) *(leagues|teams|members|league_members)' server/)" "0"
+# 決定#11（運営系テーブルへの書き込みAPIを作らない）は T21 で覆った。
+# 山本さんが「SQL を叩くのが面倒」と言い、運営メニューから直接反映する形にしたため。
+# ただし**書き込んでよいのは server/routes/roster.ts の1本だけ**。
+# ほかのルートに散ると、どこから名簿が変わるのか追えなくなる。
+check "運営系テーブルへ書けるのは roster.ts だけ" \
+  "$(banned_in_code '(INSERT INTO|UPDATE|DELETE FROM) *(leagues|teams|members|league_members)' server/auth.ts server/body.ts server/index.ts server/routes/games.ts server/routes/leagues.ts)" "0"
+check "roster.ts は members を消さない（論理削除でも物理削除でもない）" \
+  "$(banned_in_code 'DELETE FROM *members' server/routes/roster.ts)" "0"
+check "roster.ts は game_results に触らない" \
+  "$(banned_in_code 'game_results' server/routes/roster.ts)" "0"
 check "100000 のハードコードが無い"      "$(banned_in_code '100000|100_000' server/ src/lib/api.ts src/lib/scoring.ts src/lib/validation.ts src/lib/types.ts)" "0"
 
 echo

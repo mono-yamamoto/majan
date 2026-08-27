@@ -1,8 +1,9 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import { toLeagueRule } from "../../src/lib/types";
 import type { GameInput, LeagueRow } from "../../src/lib/types";
 import { validateGameInput, type Roster } from "../../src/lib/validation";
 import { requirePasscode } from "../auth";
+import { readJson } from "../body";
 import type { Bindings } from "../index";
 import { parseId } from "./leagues";
 
@@ -74,23 +75,6 @@ function parseLeagueId(body: unknown): Parsed<number> {
     return { ok: false, error: "leagueId must be a positive integer" };
   }
   return { ok: true, value: leagueId };
-}
-
-/** ボディの上限。title 60文字は validation で見るが、c.req.json() はその前に全体をパースする */
-const MAX_BODY_BYTES = 16 * 1024;
-
-type Body = { ok: true; value: unknown } | { ok: false; status: 400 | 413; error: string };
-
-async function readJson(c: Context<{ Bindings: Bindings }>): Promise<Body> {
-  const declared = Number(c.req.header("Content-Length") ?? "0");
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
-    return { ok: false, status: 413, error: "request body too large" };
-  }
-  try {
-    return { ok: true, value: await c.req.json() };
-  } catch {
-    return { ok: false, status: 400, error: "invalid json" };
-  }
 }
 
 /**
