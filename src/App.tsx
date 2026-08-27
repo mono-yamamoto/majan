@@ -19,15 +19,46 @@ import { MemberPage } from "@/features/members/MemberPage";
 import { AdminPage } from "@/features/admin/AdminPage";
 import { RulesPage } from "@/features/rules/RulesPage";
 import { ScoresPage } from "@/features/scores/ScoresPage";
+import { YakuPage } from "@/features/yaku/YakuPage";
 import { StandingsPage } from "@/features/standings/StandingsPage";
 import { LeagueProvider } from "@/components/LeagueProvider";
 import { useLeague } from "@/lib/league-context";
 import { NewGameSheetContext } from "@/lib/new-game-sheet";
 import { NewGameSheet } from "@/features/games/NewGameSheet";
 
+/**
+ * ヘッダの脇に置く早見表へのリンク（点数表・役）。
+ *
+ * 下線は**リンクの印**として常に引く。だから下バーと違い、下線ではいまいる
+ * ページを示せない。**太字と濃い色**の2つで示す（色だけに頼らない）。
+ * 下バーの NavItem と同じで、見た目と `aria-current` は同じ判定から出す。
+ */
+function HeaderLink({
+  to,
+  active,
+  children,
+}: {
+  to: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      to={to}
+      aria-current={active ? "page" : undefined}
+      className={`px-2 py-1 text-sm underline ${
+        active ? "text-foreground font-bold" : "text-muted-foreground"
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
+
 function Header() {
   const { league } = useLeague();
   const { leagueId } = useParams();
+  const { pathname } = useLocation();
   const [passcodeOpen, setPasscodeOpen] = useState(false);
 
   return (
@@ -43,9 +74,12 @@ function Header() {
           {league.name}
         </Link>
         <div className="flex shrink-0 items-center gap-1">
-          <Link to={`/leagues/${leagueId}/scores`} className="px-2 py-1 text-sm underline">
+          <HeaderLink to={`/leagues/${leagueId}/scores`} active={pathname.endsWith("/scores")}>
             点数表
-          </Link>
+          </HeaderLink>
+          <HeaderLink to={`/leagues/${leagueId}/yaku`} active={pathname.endsWith("/yaku")}>
+            役
+          </HeaderLink>
           <Button
             variant="ghost"
             size="sm"
@@ -299,6 +333,14 @@ export function App() {
           element={
             <LeagueLayout>
               <ScoresPage />
+            </LeagueLayout>
+          }
+        />
+        <Route
+          path="/leagues/:leagueId/yaku"
+          element={
+            <LeagueLayout>
+              <YakuPage />
             </LeagueLayout>
           }
         />

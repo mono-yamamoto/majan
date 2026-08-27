@@ -260,7 +260,8 @@ export const BIG_HANDS = [
     parentTsumo: "12000",
   },
   {
-    name: "役満",
+    // 数え役満は rules.mdx で「あり」（13翻以上は役満）
+    name: "役満（13翻以上・役満役）",
     childRon: "32000",
     childTsumo: "8000-16000",
     parentRon: "48000",
