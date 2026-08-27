@@ -28,7 +28,10 @@ import { NewGameSheetContext } from "@/lib/new-game-sheet";
 import { NewGameSheet } from "@/features/games/NewGameSheet";
 
 /**
- * ヘッダの脇に置く早見表へのリンク（点数表・役）。
+ * ヘッダの脇に置くリンク。
+ *
+ * 今はメンバー一覧だけ。点数表と役も置いていたが、山本さんの判断で外した
+ * （コメントアウトして残してある。戻すならそこを外す）。
  *
  * 下線は**リンクの印**として常に引く。だから下バーと違い、下線ではいまいる
  * ページを示せない。**太字と濃い色**の2つで示す（色だけに頼らない）。
@@ -47,9 +50,7 @@ function HeaderLink({
     <Link
       to={to}
       aria-current={active ? "page" : undefined}
-      className={`px-2 py-1 text-sm underline ${
-        active ? "text-foreground font-bold" : "text-muted-foreground"
-      }`}
+      className={`px-2 py-1 text-sm underline ${active ? "text-foreground font-bold" : "text-muted-foreground"}`}
     >
       {children}
     </Link>
@@ -59,13 +60,18 @@ function HeaderLink({
 /**
  * ヘッダのパスコードボタンのラベル。**1か所で持つ**。
  *
- * もとは「パスコード」だったが、320px でメンバーを足すと**リーグ名が 23px まで
- * 潰れて1文字も読めなくなった**ので、短い語にして 62px を確保した
- * （「2026 合宿」なら「2026 合」まで見える。実測）。
- * `aria-label` は「書き込みパスコードの設定」のままなので読み上げは変わらない。
- * 「パスコード」に戻したくなったらここだけ直す（ただしリーグ名は 23px に戻る）。
+ * 一度「設定」に縮めたことがある。ヘッダに **点数表・役・メンバーの3つ**を並べた
+ * ときは、320px でリーグ名が 23px（1文字も読めない）まで潰れたため。
+ *
+ * **点数表と役をヘッダから外した**（下のコメントアウト）ので余裕ができ、「パスコード」に
+ * 戻した。実測: ヘッダが「リーグ名 / メンバー / パスコード」の状態なら、
+ * **320px でも溢れ 0・リーグ名 109px・「2026 秋リーグ」が9文字とも見える**。
+ *
+ * ここに何かを足すときは、**リーグ名が切れないか**を測ること
+ * （`name.scrollWidth > name.clientWidth`）。溢れ 0 でも `truncate` があるので
+ * リーグ名だけが黙って縮む。
  */
-const PASSCODE_LABEL = "設定";
+const PASSCODE_LABEL = "パスコード";
 
 function Header() {
   const { league } = useLeague();
@@ -86,12 +92,12 @@ function Header() {
           {league.name}
         </Link>
         <div className="flex shrink-0 items-center gap-1">
-          <HeaderLink to={`/leagues/${leagueId}/scores`} active={pathname.endsWith("/scores")}>
+          {/* <HeaderLink to={`/leagues/${leagueId}/scores`} active={pathname.endsWith("/scores")}>
             点数表
           </HeaderLink>
           <HeaderLink to={`/leagues/${leagueId}/yaku`} active={pathname.endsWith("/yaku")}>
             役
-          </HeaderLink>
+          </HeaderLink> */}
           <HeaderLink to={`/leagues/${leagueId}/members`} active={pathname.endsWith("/members")}>
             メンバー
           </HeaderLink>
@@ -139,11 +145,7 @@ function NavItem({
     <Link
       to={to}
       aria-current={active ? "page" : undefined}
-      className={`shrink-0 border-b-2 ${
-        active
-          ? "border-foreground text-foreground font-medium"
-          : "border-transparent text-muted-foreground"
-      }`}
+      className={`shrink-0 border-b-2 ${active ? "border-foreground text-foreground font-medium" : "border-transparent text-muted-foreground"}`}
     >
       {children}
     </Link>
