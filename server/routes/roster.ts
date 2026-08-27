@@ -16,13 +16,21 @@
  *    相手の変更を黙って踏み潰す。SQL を手で流していたときは1人でやっていたので
  *    起きなかった事故が、API にすると起きる。
  *
+ *    ★ **塞いだのは「画面を開いたまま放置した」長い窓だけ。**
+ *    読み取りと `batch()` の間のミリ秒の窓は残っている。同時に2人が同じ人を
+ *    改名すると、**両方が `before` 検証を通って後勝ちになる**（実測）。
+ *    D1 に対話的トランザクションが無く、読んでから書くまでを1つにできない。
+ *    「原子的だから安全」ではない。**`batch()` が原子的なのは1リクエストの中だけ**で、
+ *    リクエスト同士は直列化していない。
+ *    id の衝突だけは、落ちたときに 409 へ写して読み込み直させている（下の catch）。
+ *
  * 3. **`batch()` で全部一括。** D1 に対話的トランザクションは無く、
  *    原子化の手段はこれだけ。1件ずつ流すと、途中で落ちたときに
  *    「チーム名だけ変わって所属は変わっていない」半端な状態が残る。
  */
 
 import { Hono } from "hono";
-import type { Change } from "../../src/lib/roster-changes";
+import { NAME_MAX_LENGTH, sanitizeName, type Change } from "../../src/lib/roster-changes";
 import { requirePasscode } from "../auth";
 import { readJson } from "../body";
 import type { Bindings } from "../index";
@@ -83,6 +91,30 @@ function parseChanges(body: unknown): { ok: true; value: Change[] } | { ok: fals
   const int = (v: unknown) => typeof v === "number" && Number.isSafeInteger(v) && v > 0;
   const str = (v: unknown) => typeof v === "string";
 
+  /**
+   * DB に入れる名前を整える。**ここを通った値しか書き込まない。**
+   *
+   * 通さないと、空文字・空白だけ・制御文字入り・前後空白つき・
+   * 極端に長い名前がそのまま入る。名前はランキング・ヘッダ・
+   * 登録画面の optgroup ラベルにそのまま出るので、
+   * **「誰がどのチームか分からなくて登録できない」（T7 で直した状態）に戻る**。
+   *
+   * 400 にするのは、空の名前は**読み込み直しても直らない**から
+   * （409 は「読み込み直せば直る」ものに使う）。
+   *
+   * 正規化した値を使うことで、「運営が触っていない行が勝手に改名として
+   * 差分に出る」も消える。DB に正規化済みの値しか入らなくなるため。
+   */
+  const cleanName = (v: unknown): { ok: true; value: string } | { ok: false; why: string } => {
+    if (!str(v)) return { ok: false, why: "must be a string" };
+    const name = sanitizeName(v as string).trim();
+    if (name === "") return { ok: false, why: "must not be empty" };
+    if (name.length > NAME_MAX_LENGTH) {
+      return { ok: false, why: `must be ${NAME_MAX_LENGTH} characters or fewer` };
+    }
+    return { ok: true, value: name };
+  };
+
   const out: Change[] = [];
   for (const [i, item] of raw.entries()) {
     if (typeof item !== "object" || item === null) {
@@ -91,30 +123,39 @@ function parseChanges(body: unknown): { ok: true; value: Change[] } | { ok: fals
     const c = item as Record<string, unknown>;
     const bad = (why: string) => ({ ok: false as const, error: `changes[${i}]: ${why}` });
     switch (c.kind) {
-      case "leagueName":
-        if (!str(c.before) || !str(c.after)) return bad("before/after must be strings");
-        out.push({ kind: "leagueName", before: c.before as string, after: c.after as string });
+      case "leagueName": {
+        if (!str(c.before)) return bad("before must be a string");
+        const after = cleanName(c.after);
+        if (!after.ok) return bad(`after ${after.why}`);
+        out.push({ kind: "leagueName", before: c.before as string, after: after.value });
         break;
-      case "teamName":
+      }
+      case "teamName": {
         if (!int(c.teamId)) return bad("teamId must be a positive integer");
-        if (!str(c.before) || !str(c.after)) return bad("before/after must be strings");
+        if (!str(c.before)) return bad("before must be a string");
+        const after = cleanName(c.after);
+        if (!after.ok) return bad(`after ${after.why}`);
         out.push({
           kind: "teamName",
           teamId: c.teamId as number,
           before: c.before as string,
-          after: c.after as string,
+          after: after.value,
         });
         break;
-      case "rename":
+      }
+      case "rename": {
         if (!int(c.memberId)) return bad("memberId must be a positive integer");
-        if (!str(c.before) || !str(c.after)) return bad("before/after must be strings");
+        if (!str(c.before)) return bad("before must be a string");
+        const after = cleanName(c.after);
+        if (!after.ok) return bad(`after ${after.why}`);
         out.push({
           kind: "rename",
           memberId: c.memberId as number,
           before: c.before as string,
-          after: c.after as string,
+          after: after.value,
         });
         break;
+      }
       case "team":
         if (!int(c.memberId)) return bad("memberId must be a positive integer");
         if (!int(c.before) || !int(c.after)) return bad("before/after must be positive integers");
@@ -138,17 +179,19 @@ function parseChanges(body: unknown): { ok: true; value: Change[] } | { ok: fals
           teamId: c.teamId as number,
         });
         break;
-      case "add":
+      case "add": {
         if (!int(c.memberId)) return bad("memberId must be a positive integer");
         if (!int(c.teamId)) return bad("teamId must be a positive integer");
-        if (!str(c.name) || (c.name as string).trim() === "") return bad("name must not be empty");
+        const name = cleanName(c.name);
+        if (!name.ok) return bad(`name ${name.why}`);
         out.push({
           kind: "add",
           memberId: c.memberId as number,
-          name: c.name as string,
+          name: name.value,
           teamId: c.teamId as number,
         });
         break;
+      }
       default:
         return bad(`unknown kind: ${String(c.kind)}`);
     }
@@ -280,6 +323,9 @@ function statementsFor(db: D1Database, change: Change, leagueId: number): D1Prep
           .bind(change.after, change.teamId, leagueId),
       ];
     case "rename":
+      // members はリーグ横断（人は全体で1行）。同じ人が別リーグにもいれば
+      // そちらの表示も変わるが、それが正しい。このリーグの名簿にいることは
+      // validate で確認済み。members に league_id は無いので絞りようもない。
       return [
         db
           .prepare("UPDATE members SET name = ?1 WHERE id = ?2")
@@ -338,6 +384,15 @@ roster.post("/api/leagues/:id/roster", async (c) => {
     await db.batch(statements);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    // 検証と batch の間に別のリクエストが同じ id を入れると、ここで落ちる。
+    // 500 のままだと「サーバーが壊れた」に見えるが、実際は読み込み直せば直る。
+    // games.ts が NOT NULL → 404 に写しているのと同じ手法。
+    if (message.includes("UNIQUE constraint failed: members.id")) {
+      const conflicts = [
+        { kind: "add", message: "追加しようとした番号を、ほぼ同時に別の人が使いました" },
+      ];
+      return c.json({ conflicts }, 409);
+    }
     console.error("[roster] batch failed:", message);
     return c.json({ error: "database error" }, 500);
   }

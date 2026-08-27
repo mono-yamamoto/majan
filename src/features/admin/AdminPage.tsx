@@ -23,6 +23,14 @@
 
 import { useMemo, useState } from "react";
 import { PasscodeDialog } from "@/components/PasscodeDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { describeFailure, useLeague } from "@/lib/league-context";
@@ -33,6 +41,7 @@ import {
   diffRoster,
   nextMemberId,
   sanitizeName,
+  NAME_MAX_LENGTH,
   type Change,
   type EditedRow,
   type NewRow,
@@ -174,6 +183,18 @@ function AdminBody({
   const removingPlayed = changes.filter((c) => c.kind === "remove" && played.has(c.memberId));
   const movingAfterStart = games.length > 0 && changes.some((c) => c.kind === "team");
 
+  /**
+   * 確認を1枚挟むかどうか。**戻らない操作のときだけ**出す。
+   *
+   * SQL をコピペしていた頃は、貼る前に読み返す時間が自然にあった。それが
+   * 消えたぶん、被害が戻らない操作にだけ確認を戻す。ただの改名やチーム名変更で
+   * 毎回出すと、山本さんが「SQL が面倒」と言って消したはずの摩擦が戻る。
+   */
+  const removes = changes.filter((c) => c.kind === "remove");
+  const moves = games.length > 0 ? changes.filter((c) => c.kind === "team") : [];
+  const needsConfirm = removes.length > 0 || moves.length > 0;
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   return (
     <section>
       <h2 className="text-xl font-bold">運営メニュー</h2>
@@ -191,6 +212,7 @@ function AdminBody({
           value={leagueName}
           onChange={(e) => setLeagueName(sanitizeName(e.target.value))}
           className="mt-1"
+          maxLength={NAME_MAX_LENGTH}
           aria-label="リーグ名"
         />
       </label>
@@ -205,6 +227,7 @@ function AdminBody({
               )
             }
             className="mt-1"
+            maxLength={NAME_MAX_LENGTH}
             aria-label={`チーム名 #${t.id}`}
           />
         </label>
@@ -232,6 +255,7 @@ function AdminBody({
                   value={row.name}
                   onChange={(e) => setRow(row.memberId, { name: sanitizeName(e.target.value) })}
                   aria-label={`#${row.memberId} の名前`}
+                  maxLength={NAME_MAX_LENGTH}
                   className="min-w-0 flex-1"
                 />
               </div>
@@ -285,6 +309,7 @@ function AdminBody({
               }
               placeholder="名前"
               aria-label={`追加する #${row.memberId} の名前`}
+              maxLength={NAME_MAX_LENGTH}
               className="min-w-0 flex-1"
             />
           </div>
@@ -393,7 +418,7 @@ function AdminBody({
             type="button"
             className="mt-4 w-full"
             disabled={apply.pending}
-            onClick={() => apply.run(changes)}
+            onClick={() => (needsConfirm ? setConfirmOpen(true) : apply.run(changes))}
           >
             {apply.pending ? "反映中…" : `この内容で反映する（${changes.length}件）`}
           </Button>
@@ -401,9 +426,21 @@ function AdminBody({
       )}
 
       {applyError === null ? null : (
-        <p className="border-destructive text-destructive mt-4 rounded-lg border p-3 text-sm">
-          {applyError}
-        </p>
+        <div className="border-destructive mt-4 rounded-lg border p-3">
+          <p className="text-destructive text-sm">{applyError}</p>
+          {apply.failure?.kind === "conflict" ? (
+            // 「読み込み直してください」と言うなら、その操作を画面に置く。
+            // スマホだとブラウザのリロード操作になってしまう
+            <>
+              <Button type="button" variant="ghost" className="mt-2" onClick={reload}>
+                読み込み直す
+              </Button>
+              <p className="text-muted-foreground mt-1 text-xs">
+                読み込み直すと、編集中の内容は消えます。
+              </p>
+            </>
+          ) : null}
+        </div>
       )}
       {applied === null ? null : (
         <p className="border-border mt-4 rounded-lg border p-3 text-sm">
@@ -419,6 +456,60 @@ function AdminBody({
         </strong>{" "}
         です。
       </p>
+
+      {/* 「よろしいですか」だけにしない。誰を外すのか / 誰の pt がどちらへ移るのかを
+          名指しで出す。出せないなら確認を挟む意味が無い */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>戻せない変更が含まれています</DialogTitle>
+            <DialogDescription>反映すると、次のことが起きます。</DialogDescription>
+          </DialogHeader>
+          <ul className="mt-2 space-y-2 text-sm">
+            {removes.map((c) => (
+              <li key={`r-${c.kind === "remove" ? c.memberId : ""}`}>
+                <strong>{c.kind === "remove" ? c.name : ""}</strong> を名簿から外します。
+                {c.kind === "remove" && played.has(c.memberId) ? (
+                  <>
+                    この人は既に半荘に出ているので、
+                    <strong>
+                      過去の半荘が編集できなくなり、チーム合計 pt が釣り合わなくなります
+                    </strong>
+                    。
+                  </>
+                ) : (
+                  <>まだ半荘に出ていないので、影響はありません。</>
+                )}
+              </li>
+            ))}
+            {moves.map((c) => (
+              <li key={`t-${c.kind === "team" ? c.memberId : ""}`}>
+                <strong>{c.kind === "team" ? c.name : ""}</strong> を{" "}
+                {c.kind === "team" ? teamName(c.before) : ""} から{" "}
+                {c.kind === "team" ? teamName(c.after) : ""} へ移します。
+                <strong>この人が過去に稼いだ pt も移ります</strong>（既に半荘が {games.length}{" "}
+                件あります）。
+              </li>
+            ))}
+          </ul>
+          <DialogFooter className="mt-4">
+            <Button type="button" variant="ghost" onClick={() => setConfirmOpen(false)}>
+              やめる
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={apply.pending}
+              onClick={() => {
+                setConfirmOpen(false);
+                apply.run(changes);
+              }}
+            >
+              反映する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <PasscodeDialog
         open={apply.passcodeOpen}

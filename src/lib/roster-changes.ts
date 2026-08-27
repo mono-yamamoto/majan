@@ -65,6 +65,14 @@ export function nextMemberId(knownIds: number[]): number {
  * （ESC で始まるエスケープシーケンスは、ESC を落とすと `[31m` のような
  * 残りが見えるようになるが、それは隠れていたものが見えるだけで正しい挙動）
  */
+/**
+ * 名前の上限。`TITLE_MAX_LENGTH` と同じ 60。
+ *
+ * 名前は画面のあちこち（ランキング・ヘッダ・登録画面の optgroup ラベル）に
+ * そのまま出るので、長いとレイアウトが崩れる。上限の理由は半荘のタイトルと同じ。
+ */
+export const NAME_MAX_LENGTH = 60;
+
 export function sanitizeName(value: string): string {
   // oxlint の no-control-regex を抑制する。制御文字を落とすのが目的なので、
   // 正規表現に制御文字が出るのは意図どおり（外すと実際に警告が出ることを確認済み）

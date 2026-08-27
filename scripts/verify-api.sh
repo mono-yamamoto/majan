@@ -154,8 +154,11 @@ check() { # check <ラベル> <実際> <期待>
 # （実測: `const x = "last_insert_rowid()"; // last_insert_rowid を使う理由` が 0 になる）。
 # コメント部を落としてから数えれば、どちらの形でも検出できる（原則4）。
 banned_in_code() { # banned_in_code <正規表現> <対象...>
+  # -i を付けるのは、小文字で書かれた SQL を見逃さないため
+  # （`delete from members` が素通りするのを実測で確認した）。
+  # 改行で分断された形は追わない。ぶつ切りにする理由が無いので。
   local pattern="$1"; shift
-  grep -rnE "$pattern" "$@" 2>/dev/null | sed 's|//.*||' | grep -cE "$pattern" | tr -d ' '
+  grep -rniE "$pattern" "$@" 2>/dev/null | sed 's|//.*||' | grep -ciE "$pattern" | tr -d ' '
 }
 
 POST() { t "$1" "$2" -X POST "${BASE}/api/games" -H 'Content-Type: application/json' -H "X-Passcode: ${PASSCODE}" -d "$3"; }
@@ -526,6 +529,34 @@ ROSTER 409 'roster: 既に外れている人を外す'     '{"changes":[{"kind":
 ROSTER 409 'roster: 使用済みの id で追加'       '{"changes":[{"kind":"add","memberId":1,"name":"重複","teamId":1}]}'
 ROSTER 409 'roster: 同じ id を2回追加'          '{"changes":[{"kind":"add","memberId":50,"name":"A","teamId":1},{"kind":"add","memberId":50,"name":"B","teamId":2}]}'
 check "409 のあと members が増えていない" "$(Q "SELECT COUNT(*) AS n FROM members;")" "$members_at_roster"
+
+# --- 名前の中身（空・空白のみ・制御文字・長さ・前後空白）---
+# ここを通さないと、空のリンクや空の optgroup ラベルが画面に出る。
+# 「誰がどのチームか分からなくて登録できない」（T7 で直した状態）に戻る。
+# 読み込み直しても直らないので 409 ではなく 400。
+name3_before=$(Q "SELECT name FROM members WHERE id=3;")
+team1_before=$(Q "SELECT name FROM teams WHERE id=1;")
+RENAME3() { printf '{"changes":[{"kind":"rename","memberId":3,"before":"%s","after":"%s"}]}' "$name3_before" "$1"; }
+ROSTER 400 'roster: 改名先が空文字'       "$(RENAME3 '')"
+ROSTER 400 'roster: 改名先が空白だけ'     "$(RENAME3 '   ')"
+ROSTER 400 'roster: 改名先が全角空白だけ' "$(RENAME3 '\u3000')"
+ROSTER 400 'roster: 改名先が制御文字だけ' "$(RENAME3 '\u0000\u001b')"
+ROSTER 400 'roster: 改名先が61文字'       "$(RENAME3 "$(head -c 61 /dev/zero | tr '\0' 'x')")"
+ROSTER 400 'roster: チーム名が空文字'     "$(printf '{"changes":[{"kind":"teamName","teamId":1,"before":"%s","after":""}]}' "$team1_before")"
+ROSTER 400 'roster: リーグ名が空白だけ'   "$(printf '{"changes":[{"kind":"leagueName","before":"%s","after":"  "}]}' "$league_before")"
+ROSTER 400 'roster: 追加の名前が空白だけ' '{"changes":[{"kind":"add","memberId":60,"name":"   ","teamId":1}]}'
+check "400 のあと名前が変わっていない"     "$(Q "SELECT name FROM members WHERE id=3;")" "$name3_before"
+check "400 のあとチーム名も変わっていない" "$(Q "SELECT name FROM teams WHERE id=1;")" "$team1_before"
+
+ROSTER 200 'roster: 改名先がちょうど60文字は通る' "$(RENAME3 "$(head -c 60 /dev/zero | tr '\0' 'y')")"
+check "60文字が入った" "$(Q "SELECT length(name) AS n FROM members WHERE id=3;")" "60"
+sixty=$(Q "SELECT name FROM members WHERE id=3;")
+ROSTER 200 'roster: 前後の空白は落として保存' "$(printf '{"changes":[{"kind":"rename","memberId":3,"before":"%s","after":"  \u9234\u6728  "}]}' "$sixty")"
+check "★ 前後の空白が落ちている" "$(Q "SELECT name FROM members WHERE id=3;")" "鈴木"
+ROSTER 200 'roster: 制御文字は落として保存' '{"changes":[{"kind":"rename","memberId":3,"before":"鈴木","after":"\u9234\u0000\u6728\u001b\u6539"}]}'
+check "★ 制御文字が落ちている"         "$(Q "SELECT name FROM members WHERE id=3;")" "鈴木改"
+check "★ 長さも制御文字ぶん減っている" "$(Q "SELECT length(name) AS n FROM members WHERE id=3;")" "3"
+ROSTER 200 'roster: 名前を戻す' '{"changes":[{"kind":"rename","memberId":3,"before":"鈴木改","after":"鈴木"}]}'
 
 # --- 他リーグの teamId は 400（このリーグの話ではないので、読み直しても直らない） ---
 W d1 execute majan --local --persist-to "$PERSIST" --command "
