@@ -73,6 +73,16 @@ export function StandingsPage() {
     [games, stats.scoredGameIds],
   );
 
+  /**
+   * 線に使うチームの色。**チームモードのときだけ**作る。
+   * 個人モードで渡すと、同じチームの5人が全部同じ色になって見分けられない。
+   * `series` と同じ並び（stats.teams の順）にする。
+   */
+  const teamColors = useMemo(
+    () => (mode === "team" ? stats.teams.map((t) => colorOf(t.teamId)) : undefined),
+    [mode, stats.teams, colorOf],
+  );
+
   const series = useMemo(
     () =>
       mode === "team"
@@ -201,7 +211,7 @@ export function StandingsPage() {
           <Suspense
             fallback={<p className="text-muted-foreground mt-4 text-sm">グラフを読み込み中…</p>}
           >
-            <CumulativeChart series={series} axis={axis} />
+            <CumulativeChart series={series} axis={axis} teamColors={teamColors} />
           </Suspense>
         </>
       )}

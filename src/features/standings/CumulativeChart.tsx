@@ -18,35 +18,26 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { seriesColors } from "@/lib/chart-palette";
 import { tickLabel, tooltipHeading, toRows, type ChartAxis, type ChartSeries } from "./chart-rows";
-
-/**
- * 個人モードは名簿の10人に加えて名簿外のメンバーが混じりうるので、
- * 10色だと先頭と末尾が同色になる。12色用意して1リーグ分は重ならないようにする。
- */
-const COLORS = [
-  "#0ea5e9",
-  "#f43f5e",
-  "#10b981",
-  "#f59e0b",
-  "#8b5cf6",
-  "#14b8a6",
-  "#ec4899",
-  "#84cc16",
-  "#6366f1",
-  "#f97316",
-  "#0891b2",
-  "#a16207",
-];
 
 export default function CumulativeChart({
   series,
   axis,
+  teamColors,
 }: {
   series: ChartSeries[];
   axis: ChartAxis;
+  /**
+   * 系列と同じ順のチームの色。**チームモードのときだけ渡す。**
+   * 個人モードに渡すと、同じチームの5人が全部同じ色になって見分けられなくなる。
+   * null の要素はパレットに落ちる（片方だけ色を設定した状態は普通に起きる）。
+   */
+  teamColors?: (string | null)[];
 }) {
   const rows = toRows(series, axis);
+  // 線と凡例で同じ配列を使う。別々に決めると、色がずれても気づけない
+  const colors = seriesColors(series.length, teamColors);
 
   return (
     <div className="mt-4">
@@ -81,7 +72,7 @@ export default function CumulativeChart({
               type="linear"
               dataKey={`s${s.id}`}
               name={s.name}
-              stroke={COLORS[i % COLORS.length]}
+              stroke={colors[i]}
               strokeWidth={2}
               // 出場が1半荘だけでも点が見えるようにする（持ち越しで線は引けるが、
               // 1半荘目だけの人は線の長さが0になるため）
@@ -106,7 +97,7 @@ export default function CumulativeChart({
           <li key={s.id} className="flex items-center gap-1">
             <span
               className="inline-block h-2 w-2 rounded-full"
-              style={{ backgroundColor: COLORS[i % COLORS.length] }}
+              style={{ backgroundColor: colors[i] }}
               aria-hidden="true"
             />
             {s.name}
