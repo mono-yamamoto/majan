@@ -3,6 +3,7 @@ import {
   buildScript,
   buildWranglerCommand,
   confirmQuery,
+  diffNames,
   diffRoster,
   nextMemberId,
   sanitizeName,
@@ -163,7 +164,9 @@ describe("diffRoster", () => {
     const edited = asEdited(CURRENT);
     edited[0]!.teamId = 2;
     edited[2]!.teamId = 1;
-    expect(diffRoster(CURRENT, edited, []).map((c) => c.memberId)).toEqual([1, 6]);
+    expect(
+      diffRoster(CURRENT, edited, []).map((c) => (c.kind === "team" ? c.memberId : null)),
+    ).toEqual([1, 6]);
   });
 });
 
@@ -287,5 +290,99 @@ describe("エスケープ / 壊しにいく入力", () => {
       // 絵文字を含むので spread ではなくマッチ数で数える（コードポイント分割を避ける）
       expect((literal.match(/'/g) ?? []).length % 2).toBe(0);
     }
+  });
+});
+
+describe("diffNames", () => {
+  const CURRENT_NAMES = {
+    leagueName: "2026 秋リーグ",
+    teams: [
+      { id: 1, name: "チームA" },
+      { id: 2, name: "チームB" },
+    ],
+  };
+
+  it("何も変えなければ空", () => {
+    expect(diffNames(CURRENT_NAMES, CURRENT_NAMES)).toEqual([]);
+  });
+
+  it("リーグ名の変更を拾う", () => {
+    expect(diffNames(CURRENT_NAMES, { ...CURRENT_NAMES, leagueName: "2026 合宿" })).toEqual([
+      { kind: "leagueName", before: "2026 秋リーグ", after: "2026 合宿" },
+    ]);
+  });
+
+  it("チーム名の変更を拾う", () => {
+    const edited = {
+      ...CURRENT_NAMES,
+      teams: [
+        { id: 1, name: "赤" },
+        { id: 2, name: "チームB" },
+      ],
+    };
+    expect(diffNames(CURRENT_NAMES, edited)).toEqual([
+      { kind: "teamName", teamId: 1, before: "チームA", after: "赤" },
+    ]);
+  });
+
+  it("両方変えたら2件（リーグが先）", () => {
+    const edited = {
+      leagueName: "2026 合宿",
+      teams: [
+        { id: 1, name: "赤" },
+        { id: 2, name: "青" },
+      ],
+    };
+    expect(diffNames(CURRENT_NAMES, edited).map((c) => c.kind)).toEqual([
+      "leagueName",
+      "teamName",
+      "teamName",
+    ]);
+  });
+
+  it("空は「入力途中」として変更に出さない（メンバー名と同じ扱い）", () => {
+    const edited = {
+      leagueName: "",
+      teams: [
+        { id: 1, name: "  " },
+        { id: 2, name: "チームB" },
+      ],
+    };
+    expect(diffNames(CURRENT_NAMES, edited)).toEqual([]);
+  });
+
+  it("前後の空白だけの違いは変更としない", () => {
+    const edited = { ...CURRENT_NAMES, leagueName: "  2026 秋リーグ  " };
+    expect(diffNames(CURRENT_NAMES, edited)).toEqual([]);
+  });
+
+  it("制御文字は落としてから比べる", () => {
+    const edited = { ...CURRENT_NAMES, leagueName: "2026 秋\u0000リーグ" };
+    expect(diffNames(CURRENT_NAMES, edited)).toEqual([]);
+  });
+
+  it("知らない team_id は無視する（画面が持っているチームだけを触る）", () => {
+    const edited = { ...CURRENT_NAMES, teams: [{ id: 99, name: "知らないチーム" }] };
+    expect(diffNames(CURRENT_NAMES, edited)).toEqual([]);
+  });
+});
+
+describe("statementFor / リーグ名・チーム名", () => {
+  it("leagueName は leagues を引数の id で更新する", () => {
+    expect(statementFor({ kind: "leagueName", before: "a", after: "2026 合宿" }, 7)).toEqual([
+      "UPDATE leagues SET name = '2026 合宿' WHERE id = 7;",
+    ]);
+  });
+
+  it("teamName は teams を team_id で更新する（league_id では引かない）", () => {
+    expect(statementFor({ kind: "teamName", teamId: 2, before: "a", after: "青" }, 1)).toEqual([
+      "UPDATE teams SET name = '青' WHERE id = 2;",
+    ]);
+  });
+
+  it("' はエスケープされる", () => {
+    expect(statementFor({ kind: "teamName", teamId: 2, before: "a", after: "O'Team" }, 1)[0]).toBe(
+      "UPDATE teams SET name = 'O''Team' WHERE id = 2;",
+    );
   });
 });

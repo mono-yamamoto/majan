@@ -66,15 +66,9 @@ export function GamesPage() {
 
   return (
     <section>
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">半荘一覧</h2>
-        <Link
-          to={`${base}/games/new`}
-          className="bg-primary text-primary-foreground hover:bg-primary/80 rounded-lg px-3 py-1.5 text-sm font-medium"
-        >
-          登録
-        </Link>
-      </div>
+      {/* 「登録」ボタンはヘッダの右端に移した。ここにも置くと、同じ見た目の
+          ボタンが数ピクセル差で2つ縦に並ぶ */}
+      <h2 className="text-xl font-bold">半荘一覧</h2>
 
       {games.length === 0 ? (
         <p className="text-muted-foreground mt-6 text-sm">

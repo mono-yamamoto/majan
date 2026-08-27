@@ -135,6 +135,22 @@ API ではないが、運営が本番で流すファイルなので同じ扱い�
 SQL の組み立て・エスケープ・差分は `src/features/admin/sql.test.ts` が持つ
 （実 D1 に流して往復一致することを確認した入力を、そのままテストに固定してある）。
 
+扱う操作:
+
+| 操作               | 生成する SQL                                         | テスト                       |
+| ------------------ | ---------------------------------------------------- | ---------------------------- |
+| リーグ名を変える   | `UPDATE leagues SET name = ? WHERE id = ?`           | ✅ diffNames / statementFor  |
+| チーム名を変える   | `UPDATE teams SET name = ? WHERE id = ?`             | ✅ 同上                      |
+| メンバー名を変える | `UPDATE members SET name = ? WHERE id = ?`           | ✅ diffRoster / statementFor |
+| チームを変える     | `UPDATE league_members SET team_id = ? WHERE ...`    | ✅ 同上                      |
+| メンバーを追加     | `INSERT INTO members` + `INSERT INTO league_members` | ✅ 同上（members が先）      |
+| 所属を外す         | `DELETE FROM league_members WHERE ...`               | ✅ 同上                      |
+| 変更後の確認       | チーム別人数 + `wrong_league`                        | ✅ confirmQuery              |
+
+**換算値（`start_point` / `return_point` / `uma`）は扱わない。** 名前は表示が
+変わるだけだが、換算値を変えると**過去の半荘の pt が全部計算し直される**。
+取り違えたときの被害が桁違いなので、同じ画面に並べない。
+
 ### 検査していないと決めたもの
 
 | 対象                           | 理由                                                             |

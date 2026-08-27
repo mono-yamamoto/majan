@@ -27,6 +27,7 @@ import {
   buildScript,
   buildWranglerCommand,
   confirmQuery,
+  diffNames,
   diffRoster,
   nextMemberId,
   sanitizeName,
@@ -75,10 +76,20 @@ function AdminBody() {
   const [edited, setEdited] = useState<EditedRow[]>(() =>
     current.map((r) => ({ memberId: r.memberId, name: r.name, teamId: r.teamId })),
   );
+  // リーグ名とチーム名も同じ「編集して差分を取る」形で扱う
+  const [leagueName, setLeagueName] = useState(league.name);
+  const [teamNames, setTeamNames] = useState(() => teams.map((t) => ({ id: t.id, name: t.name })));
   const [added, setAdded] = useState<NewRow[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const changes = useMemo(() => diffRoster(current, edited, added), [current, edited, added]);
+  const changes = useMemo(
+    () => [
+      // 名前の変更を先に出す。リーグ → チーム → メンバー の順で読める
+      ...diffNames({ leagueName: league.name, teams }, { leagueName, teams: teamNames }),
+      ...diffRoster(current, edited, added),
+    ],
+    [league.name, teams, leagueName, teamNames, current, edited, added],
+  );
   const script = useMemo(() => buildScript(changes, league.id), [changes, league.id]);
   const command = useMemo(() => buildWranglerCommand(changes, league.id), [changes, league.id]);
 
@@ -89,7 +100,9 @@ function AdminBody() {
     return ids;
   }, [games]);
 
-  const teamName = (id: number) => teams.find((t) => t.id === id)?.name ?? `#${id}`;
+  // 表示は編集後の名前を使う。「チームA から」の注記や人数が古い名前のままだと、
+  // 画面が事実と違うことを言うことになる
+  const teamName = (id: number) => teamNames.find((t) => t.id === id)?.name.trim() || `#${id}`;
 
   const setRow = (memberId: number, patch: Partial<EditedRow>) =>
     setEdited((rows) => rows.map((r) => (r.memberId === memberId ? { ...r, ...patch } : r)));
@@ -135,6 +148,39 @@ function AdminBody() {
         で流してください。
       </p>
 
+      <h3 className="mt-6 font-bold">リーグとチームの名前</h3>
+      <label className="mt-2 block">
+        <span className="text-muted-foreground text-sm">リーグ名</span>
+        <Input
+          value={leagueName}
+          onChange={(e) => setLeagueName(sanitizeName(e.target.value))}
+          className="mt-1"
+          aria-label="リーグ名"
+        />
+      </label>
+      {teamNames.map((t) => (
+        <label key={t.id} className="mt-3 block">
+          <span className="text-muted-foreground text-sm">チーム名（#{t.id}）</span>
+          <Input
+            value={t.name}
+            onChange={(e) =>
+              setTeamNames((rows) =>
+                rows.map((r) => (r.id === t.id ? { ...r, name: sanitizeName(e.target.value) } : r)),
+              )
+            }
+            className="mt-1"
+            aria-label={`チーム名 #${t.id}`}
+          />
+        </label>
+      ))}
+      {/* 換算値をここに置かない理由を、画面にも書いておく */}
+      <p className="text-muted-foreground mt-2 text-xs">
+        ウマ・オカ・持ち点は<strong>ここでは変更できません</strong>。
+        名前は表示が変わるだけですが、換算値を変えると
+        <strong>過去の半荘の pt が全部計算し直されます</strong>
+        。手順は仕様書の「ルール変更したいとき」を見てください。
+      </p>
+
       <h3 className="mt-6 font-bold">名簿</h3>
       <ul className="mt-2 space-y-3">
         {edited.map((row) => {
@@ -166,7 +212,7 @@ function AdminBody() {
                 >
                   {teams.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name}
+                      {teamName(t.id)}
                     </option>
                   ))}
                   <option value="none">所属を外す</option>
@@ -219,7 +265,7 @@ function AdminBody() {
             >
               {teams.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name}
+                  {teamName(t.id)}
                 </option>
               ))}
             </select>
@@ -262,7 +308,9 @@ function AdminBody() {
       <ul className="mt-2 text-sm">
         {teams.map((t) => (
           <li key={t.id} className="flex justify-between tabular-nums">
-            <span>{t.name}</span>
+            {/* 編集後の名前で出す。t.name のままだと「変更後の人数」が
+                変更前の名前を名乗ることになる */}
+            <span>{teamName(t.id)}</span>
             <span>{counts.get(t.id) ?? 0}人</span>
           </li>
         ))}
@@ -330,8 +378,12 @@ function AdminBody() {
       ) : null}
 
       <p className="text-muted-foreground mt-6 text-xs">
-        DB を直接変えたら、<code>db/roster.local.sql</code>{" "}
-        も同じ内容に直しておくと、あとで流し直したときに古い内容へ戻りません。
+        DB を直接変えたら、テンプレート側も同じ内容に直しておくと、あとで流し直したときに
+        古い内容へ戻りません。メンバーと所属は <code>db/roster.local.sql</code>、
+        <strong>
+          リーグ名とチーム名は <code>db/seed.local.sql</code>
+        </strong>{" "}
+        です。
       </p>
     </section>
   );

@@ -38,12 +38,28 @@ function Header() {
           パスコード
         </Button>
       </div>
-      <nav className="mx-auto flex max-w-screen-sm gap-4 overflow-x-auto px-4 pb-2 text-sm">
-        <Link to={base}>戦績</Link>
-        <Link to={`${base}/games`}>半荘一覧</Link>
-        <Link to={`${base}/games/new`}>登録</Link>
-        <Link to={`${base}/rules`}>ルール</Link>
-      </nav>
+      {/* 「登録」だけ性質が違う（他は閲覧、登録は書き込み）ので、同列に並べず
+          右端のボタンにする。リンク側は min-w-0 で縮ませ、ボタンは shrink-0 で
+          潰さない。390px でナビ3つ + ボタンが1行に収まることを実機で確認済み */}
+      <div className="mx-auto flex max-w-screen-sm items-center justify-between gap-3 px-4 pb-2">
+        <nav className="flex min-w-0 gap-4 overflow-x-auto text-sm">
+          <Link to={base} className="shrink-0">
+            戦績
+          </Link>
+          <Link to={`${base}/games`} className="shrink-0">
+            半荘一覧
+          </Link>
+          <Link to={`${base}/rules`} className="shrink-0">
+            ルール
+          </Link>
+        </nav>
+        <Link
+          to={`${base}/games/new`}
+          className="bg-primary text-primary-foreground hover:bg-primary/80 shrink-0 rounded-lg px-3 py-1 text-sm font-medium"
+        >
+          登録
+        </Link>
+      </div>
       <PasscodeDialog open={passcodeOpen} onOpenChange={setPasscodeOpen} />
     </header>
   );
