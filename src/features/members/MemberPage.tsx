@@ -37,6 +37,22 @@ export function MemberPage() {
   );
   const axis = useMemo(() => buildAxis(gameOrder), [gameOrder]);
 
+  // 毎レンダー新しい配列を作らない。線を描くアニメーションを入れたので、
+  // 配列の同一性が変わると再生される。いまこの画面は state を持たないので
+  // 実害は無いが、あとで state を足したときに「関係ない操作で線が描き直される」
+  // ことになる。StandingsPage 側は既に useMemo してあるので、そちらに揃える。
+  //
+  // 「見つかりません」の早期 return より前に置く。後ろだとフックが条件付きで
+  // 呼ばれることになり、呼び出し順が揃わない。
+  const series = useMemo(
+    () =>
+      me === undefined || me.gameCount === 0
+        ? []
+        : [toSeries(me.memberId, member?.name ?? `#${id}`, me.cumulative, gameOrder)],
+    [me, member, id, gameOrder],
+  );
+  const memberName = member?.name ?? `#${id}`;
+
   // 名簿から外れたメンバーでも、半荘に出ていれば成績は存在する（unassigned・D-23）。
   // 戦績のランキングは「#99」として表示しリンクも張っているので、
   // ここで「見つかりません」と言うと、成績があるのに無いと嘘をつくことになる。
@@ -55,7 +71,6 @@ export function MemberPage() {
     );
   }
 
-  const displayName = member?.name ?? `#${id}`;
   const teamName =
     member === undefined ? undefined : teams.find((t) => t.id === roster.get(member.id))?.name;
   const rows: [string, string][] = [
@@ -69,8 +84,6 @@ export function MemberPage() {
     ["最低素点", fmtScore(me.minRawScore)],
   ];
 
-  const series =
-    me.gameCount === 0 ? [] : [toSeries(me.memberId, displayName, me.cumulative, gameOrder)];
   /** 出場した半荘の日付（1半荘だけのときに文言へ出す） */
   const onlyGameDate =
     me.cumulative.length === 1 ? (gameOrder.get(me.cumulative[0].gameId)?.label ?? "") : "";
@@ -78,7 +91,7 @@ export function MemberPage() {
   return (
     <section>
       <div className="flex items-baseline gap-2">
-        <h2 className="text-xl font-bold">{displayName}</h2>
+        <h2 className="text-xl font-bold">{memberName}</h2>
         {teamName === undefined ? null : (
           <span className="text-muted-foreground text-sm">{teamName}</span>
         )}

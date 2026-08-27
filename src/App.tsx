@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useParams } from "react-router";
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useParams } from "react-router";
 import { LeagueIndex } from "@/components/LeagueIndex";
 import { PasscodeDialog } from "@/components/PasscodeDialog";
 import { Button } from "@/components/ui/button";
@@ -45,22 +45,39 @@ function Header() {
 const NAV_HEIGHT = "3.5rem";
 
 /**
- * 下バーのリンク。いまいるページを太字＋濃い色にする。
+ * 下バーのリンク。いまいるページを **下線・太字・濃い色** の3つで示す。
  *
- * 色だけで表さない（色覚に依存させない）ので font-medium も併せる。
- * `aria-current="page"` は NavLink が自動で付ける。
+ * 文字色と太さだけでは弱い、という差し戻しを受けて下線を足した。
+ * 3つとも変えるのは、色だけに頼らない（色覚に依存させない）ため。
+ *
+ * 非アクティブにも同じ太さの**透明な**下線を引く。付け外しすると
+ * リンクの高さが 2px 変わって、切り替えのたびに3項目が上下する。
+ *
+ * どこがアクティブかは NavLink の前方一致に任せず、呼び出し側が渡す。
+ * 「/members/:id では戦績を光らせる」のような規則は前方一致で書けないので、
+ * 見た目と `aria-current` の両方を同じ1つの判定から出す（食い違わせない）。
  */
-function NavItem({ to, end, children }: { to: string; end?: boolean; children: React.ReactNode }) {
+function NavItem({
+  to,
+  active,
+  children,
+}: {
+  to: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <NavLink
+    <Link
       to={to}
-      end={end}
-      className={({ isActive }) =>
-        `shrink-0 ${isActive ? "text-foreground font-medium" : "text-muted-foreground"}`
-      }
+      aria-current={active ? "page" : undefined}
+      className={`shrink-0 border-b-2 ${
+        active
+          ? "border-foreground text-foreground font-medium"
+          : "border-transparent text-muted-foreground"
+      }`}
     >
       {children}
-    </NavLink>
+    </Link>
   );
 }
 
@@ -77,17 +94,32 @@ function NavItem({ to, end, children }: { to: string; end?: boolean; children: R
  */
 function BottomNav() {
   const { leagueId } = useParams();
+  const { pathname } = useLocation();
   const base = `/leagues/${leagueId}`;
+
+  // どの画面でどのタブを光らせるか。「下位ページでは親のタブを光らせる」で統一する。
+  //   戦績     : 個人成績も含める。/members/:id への導線は戦績のランキングだけで、
+  //              ほかから入る経路が無いので「戦績の下位ページ」と言い切れる
+  //   半荘一覧 : 登録・編集は一覧から入って一覧へ戻るので含める
+  //   運営メニュー: どのタブの下でもないので、どれも光らない
+  const isStandings = pathname === base || pathname.startsWith(`${base}/members/`);
+  const isGames = pathname.startsWith(`${base}/games`);
+  const isRules = pathname === `${base}/rules`;
 
   return (
     <nav className="border-border bg-background fixed inset-x-0 bottom-0 z-20 border-t pb-[env(safe-area-inset-bottom)]">
       {/* 3カラムの grid。中央のリンク群を**画面の中央**に置きたいので、
           左右を 1fr にすると中央列が画面の中心に来る（justify-between + mx-auto
           だと、幅が狭いときにリンク群がボタンの下へ潜り込む）。
-          320px（iPhone SE）で左右の列が 57.3px ずつに揃い、中心のずれ 0・
-          リンク群とボタンの隙間 5px であることを実測。
-          300px を下回ると左右の 1fr が同じ幅にならず（それぞれの最小幅が違うため）、
-          ボタンが数 px 左にはみ出す。押せなくはならないが、その幅は対象外とする。
+
+          実測（下線を入れた後の値）:
+            320px（iPhone SE）: 列 57.3 / 157.5 / 57.3、中心のずれ 0、隙間 +5.3px
+            300px            : 列 47.3 / 157.5 / 47.3、中心のずれ 0、隙間 -4.7px
+                               ＝「ルール」の右端 5px がボタンの下に潜る
+          **320px 未満は対象外**とする（iPhone SE の 320 が想定する最小幅）。
+          潜っても押せなくはならない（タップの中心はボタンの外）が、
+          「ルール」の右端が欠けて見える。ページの横スクロールは出ない。
+
           中央列の minmax(0, auto) は、極端に狭いときに中の overflow-x-auto を
           効かせるため（auto のままだと縮めずにはみ出す） */}
       <div
@@ -96,15 +128,15 @@ function BottomNav() {
       >
         <span aria-hidden="true" />
         <div className="flex min-w-0 justify-center gap-4 overflow-x-auto text-sm">
-          {/* 戦績は base なので end が要る。付けないと前方一致で
-              /games や /rules にいるときも光る */}
-          <NavItem to={base} end>
+          <NavItem to={base} active={isStandings}>
             戦績
           </NavItem>
-          {/* 半荘一覧は end を付けない。/games/new と /games/:id/edit は
-              一覧の下位ページなので、そこにいる間も一覧が光るのが自然 */}
-          <NavItem to={`${base}/games`}>半荘一覧</NavItem>
-          <NavItem to={`${base}/rules`}>ルール</NavItem>
+          <NavItem to={`${base}/games`} active={isGames}>
+            半荘一覧
+          </NavItem>
+          <NavItem to={`${base}/rules`} active={isRules}>
+            ルール
+          </NavItem>
         </div>
         <div className="flex justify-end">
           <Link
