@@ -82,7 +82,14 @@ export default function CumulativeChart({
               // 1半荘目だけの人は線の長さが0になるため）
               dot={{ r: 2 }}
               activeDot={{ r: 4 }}
-              isAnimationActive={false}
+              // 線を描き足すアニメーション。T8 では isAnimationActive={false} で
+              // 切っていたが、理由が残っていなかったので実測して入れ直した。
+              //   - hover / ツールチップでは**再生されない**（実測）。再生されるのは
+              //     初回表示とチーム⇔個人の切り替え＝データが変わったときだけ
+              //   - 既定の 1500ms は長すぎる。切り替えて見比べる操作を待たせない 400ms
+              //   - dot は最初から全部出て、線が後から繋いでいく形になる。
+              //     dot は「1半荘だけの人の点が見える」ために必要なので消せない
+              animationDuration={400}
             />
           ))}
         </LineChart>

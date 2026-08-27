@@ -12,9 +12,9 @@ import { buildAxis, buildGameOrder, toSeries } from "./chart-rows";
 const CumulativeChart = lazy(() => import("./CumulativeChart"));
 
 const fmtPt = (pt: number) => `${pt > 0 ? "+" : ""}${pt.toFixed(1)}`;
-/** 未定義の指標は「–」。NaN や ±Infinity は画面に出さない（D-23） */
-const fmtOrDash = (v: number | null, digits = 1) =>
-  v === null || !Number.isFinite(v) ? "–" : v.toFixed(digits);
+
+/** 順位番号 → メダル。同点なら同じ順位番号なので、同点1位が2人なら🥇が2つ出る */
+const MEDALS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
 export function StandingsPage() {
   const { league, members, teams, games, roster } = useLeague();
@@ -144,6 +144,14 @@ export function StandingsPage() {
                 <span className="text-muted-foreground w-5 tabular-nums">
                   {m.gameCount === 0 ? "–" : displayRank[i]}
                 </span>
+                {/* メダルは順位番号（displayRank）で決める。配列の添字だと
+                    同点1位が2人いたとき2人目が銀になる。
+                    未出場（順位が「–」）には付けない。
+                    幅を固定しているのは、4位以下でも名前の左端を揃えるため。
+                    順位番号は左の span に出ているので、絵文字は装飾（aria-hidden） */}
+                <span className="w-4 shrink-0 text-center text-xs" aria-hidden="true">
+                  {m.gameCount === 0 ? "" : (MEDALS[displayRank[i] as number] ?? "")}
+                </span>
                 <Link
                   to={`/leagues/${leagueId}/members/${m.memberId}`}
                   className="flex-1 underline"
@@ -151,9 +159,8 @@ export function StandingsPage() {
                   {nameOf(m.memberId)}
                 </Link>
                 <span className="shrink-0 tabular-nums">{fmtPt(m.totalPt)}pt</span>
-                {/* 390px 幅だと折り返して2行になるので、区切りを詰めて改行を禁止する */}
-                <span className="text-muted-foreground w-[5.5rem] shrink-0 text-right text-xs whitespace-nowrap tabular-nums">
-                  {m.gameCount}半荘 {fmtOrDash(m.averageRank, 2)}位
+                <span className="text-muted-foreground w-12 shrink-0 text-right text-xs whitespace-nowrap tabular-nums">
+                  {m.gameCount}半荘
                 </span>
               </li>
             ))}

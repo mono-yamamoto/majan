@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Link, Navigate, Route, Routes, useParams } from "react-router";
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useParams } from "react-router";
 import { LeagueIndex } from "@/components/LeagueIndex";
 import { PasscodeDialog } from "@/components/PasscodeDialog";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,26 @@ function Header() {
 const NAV_HEIGHT = "3.5rem";
 
 /**
+ * 下バーのリンク。いまいるページを太字＋濃い色にする。
+ *
+ * 色だけで表さない（色覚に依存させない）ので font-medium も併せる。
+ * `aria-current="page"` は NavLink が自動で付ける。
+ */
+function NavItem({ to, end, children }: { to: string; end?: boolean; children: React.ReactNode }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        `shrink-0 ${isActive ? "text-foreground font-medium" : "text-muted-foreground"}`
+      }
+    >
+      {children}
+    </NavLink>
+  );
+}
+
+/**
  * 画面下部に固定するナビ。スマホでは上端より親指が届きやすい。
  *
  * - 下スクロールで隠さない。常に出ている方が単純で、10人が時々使うアプリで
@@ -61,27 +81,39 @@ function BottomNav() {
 
   return (
     <nav className="border-border bg-background fixed inset-x-0 bottom-0 z-20 border-t pb-[env(safe-area-inset-bottom)]">
+      {/* 3カラムの grid。中央のリンク群を**画面の中央**に置きたいので、
+          左右を 1fr にすると中央列が画面の中心に来る（justify-between + mx-auto
+          だと、幅が狭いときにリンク群がボタンの下へ潜り込む）。
+          320px（iPhone SE）で左右の列が 57.3px ずつに揃い、中心のずれ 0・
+          リンク群とボタンの隙間 5px であることを実測。
+          300px を下回ると左右の 1fr が同じ幅にならず（それぞれの最小幅が違うため）、
+          ボタンが数 px 左にはみ出す。押せなくはならないが、その幅は対象外とする。
+          中央列の minmax(0, auto) は、極端に狭いときに中の overflow-x-auto を
+          効かせるため（auto のままだと縮めずにはみ出す） */}
       <div
-        className="mx-auto flex max-w-screen-sm items-center justify-between gap-3 px-4"
+        className="mx-auto grid max-w-screen-sm grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-2 px-4"
         style={{ height: NAV_HEIGHT }}
       >
-        <div className="flex min-w-0 gap-4 overflow-x-auto text-sm">
-          <Link to={base} className="shrink-0">
+        <span aria-hidden="true" />
+        <div className="flex min-w-0 justify-center gap-4 overflow-x-auto text-sm">
+          {/* 戦績は base なので end が要る。付けないと前方一致で
+              /games や /rules にいるときも光る */}
+          <NavItem to={base} end>
             戦績
-          </Link>
-          <Link to={`${base}/games`} className="shrink-0">
-            半荘一覧
-          </Link>
-          <Link to={`${base}/rules`} className="shrink-0">
-            ルール
+          </NavItem>
+          {/* 半荘一覧は end を付けない。/games/new と /games/:id/edit は
+              一覧の下位ページなので、そこにいる間も一覧が光るのが自然 */}
+          <NavItem to={`${base}/games`}>半荘一覧</NavItem>
+          <NavItem to={`${base}/rules`}>ルール</NavItem>
+        </div>
+        <div className="flex justify-end">
+          <Link
+            to={`${base}/games/new`}
+            className="bg-primary text-primary-foreground hover:bg-primary/80 shrink-0 rounded-lg px-4 py-2 text-sm font-medium"
+          >
+            登録
           </Link>
         </div>
-        <Link
-          to={`${base}/games/new`}
-          className="bg-primary text-primary-foreground hover:bg-primary/80 shrink-0 rounded-lg px-4 py-2 text-sm font-medium"
-        >
-          登録
-        </Link>
       </div>
     </nav>
   );
