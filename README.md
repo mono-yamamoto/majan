@@ -17,8 +17,9 @@
 - 個人の成績ページ（順位分布・平均順位・トップ率など）
 - 対局ルールの掲示
 
-作らないもの: ログイン画面 / 管理UI / 局単位の記録 / チップ。
+作らないもの: ログイン画面 / **書き込みできる管理UI** / 局単位の記録 / チップ。
 メンバー・チーム・リーグ設定の登録は運営が SQL で直接行う。
+運営用ページ（`/leagues/1/admin`）はあるが、**流す SQL を組み立てて見せるだけ**で実行しない。
 
 ## 構成
 
@@ -47,6 +48,15 @@ docs/tasks.md   実装の判断ログ
 bun install
 ```
 
+初回は D1 のローカル DB を作る。**これを先にやらないと、起動しても「テーブルが無い」で止まる。**
+
+```bash
+bunx wrangler d1 migrations apply majan --local
+bunx wrangler d1 execute majan --local --file=./db/seed.sql
+bunx wrangler d1 execute majan --local --file=./db/roster.sql
+cp .dev.vars.example .dev.vars   # WRITE_PASSCODE を書く（本物は書かない）
+```
+
 **`bun run dev` は `/api` を `localhost:8787` にプロキシする**（`vite.config.ts`）ので、
 API を使う画面を触るなら **2つ動かす**。
 
@@ -60,15 +70,6 @@ bun run dev          # ターミナル2: Vite の dev server（HMR が効く）
 
 ```bash
 bun run preview      # vp build && wrangler dev
-```
-
-初回は D1 のローカル DB を作る。
-
-```bash
-bunx wrangler d1 migrations apply majan --local
-bunx wrangler d1 execute majan --local --file=./db/seed.sql
-bunx wrangler d1 execute majan --local --file=./db/roster.sql
-cp .dev.vars.example .dev.vars   # WRITE_PASSCODE を書く（本物は書かない）
 ```
 
 ## テストと検証

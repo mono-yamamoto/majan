@@ -5,6 +5,7 @@ import {
   confirmQuery,
   diffRoster,
   nextMemberId,
+  sanitizeName,
   shellSingleQuote,
   sqlString,
   statementFor,
@@ -63,16 +64,38 @@ describe("nextMemberId", () => {
     expect(nextMemberId([1, 2, 3])).toBe(4);
   });
 
-  it("穴があればそこを埋める", () => {
-    expect(nextMemberId([1, 2, 4, 5])).toBe(3);
+  it("★ 穴は埋めない。外した人の id を再利用すると UNIQUE で落ちる", () => {
+    // 5 を名簿から外すと GET の members から消えるが、members テーブルには残る。
+    // 穴を埋めると、外した直後の追加でちょうど 5 を提案してしまう
+    expect(nextMemberId([1, 2, 3, 4, 6, 7, 8, 9, 10])).toBe(11);
   });
 
   it("空なら 1", () => {
     expect(nextMemberId([])).toBe(1);
   });
 
-  it("順不同でも正しい", () => {
-    expect(nextMemberId([10, 1, 3, 2])).toBe(4);
+  it("順不同でも最大 + 1", () => {
+    expect(nextMemberId([10, 1, 3, 2])).toBe(11);
+  });
+});
+
+describe("sanitizeName", () => {
+  it("NUL を落とす（--file で流すと SQL がそこで切れ、黙って捨てられる）", () => {
+    expect(sanitizeName("a\u0000b")).toBe("ab");
+  });
+
+  it("ESC・BEL・改行・タブなどの C0 制御文字と DEL を落とす", () => {
+    expect(sanitizeName("a\u001bb\u0007c\nd\te\u007ff")).toBe("abcdef");
+  });
+
+  it("普通の文字は触らない（絵文字・全角・記号・引用符）", () => {
+    expect(sanitizeName('O\'Brien \u3000 🀄 $HOME `id` "x"')).toBe(
+      'O\'Brien \u3000 🀄 $HOME `id` "x"',
+    );
+  });
+
+  it("空文字はそのまま", () => {
+    expect(sanitizeName("")).toBe("");
   });
 });
 
@@ -222,5 +245,47 @@ describe("confirmQuery", () => {
     expect(sql).toContain("wrong_league");
     expect(sql).toContain("COUNT(*)");
     expect(sql).toContain("WHERE lm.league_id = 1");
+  });
+});
+
+// 実 D1 に流して往復一致することを確認した入力（SQL 直・wrangler コマンド経由の両方）。
+// このページは SQL を人に渡すので、壊れた SQL を出すと害になる。壊し方を固定しておく。
+describe("エスケープ / 壊しにいく入力", () => {
+  const NASTY: [string, string][] = [
+    ["SQL 注入っぽいもの", "x'; DROP TABLE members; --"],
+    ["二重引用符とシェル特殊文字", 'a"b$c`d\\e'],
+    ["改行", "line1\nline2"],
+    ["タブ", "tab\there"],
+    ["SQL コメント", "-- comment"],
+    ["セミコロン", ";;;"],
+    ["全角スペース", "全角\u3000スペース"],
+    ["末尾バックスラッシュ", "a\\"],
+    ["すでに '' が入っている", "a''b"],
+    ["絵文字", "🀄🀅🀆"],
+    ["長い名前", "あ".repeat(200)],
+    ["復帰改行", "a\r\nb"],
+  ];
+
+  for (const [label, name] of NASTY) {
+    it(`${label}: SQL リテラルは ' だけを '' にして、他はそのまま通す`, () => {
+      const literal = sqlString(name);
+      expect(literal.startsWith("'")).toBe(true);
+      expect(literal.endsWith("'")).toBe(true);
+      // 中身は元の文字列の ' を倍にしたものと一致する（他の文字を触っていない）
+      expect(literal.slice(1, -1)).toBe(name.replaceAll("'", "''"));
+    });
+
+    it(`${label}: シェルの引用は ' 以外を触らない`, () => {
+      const quoted = shellSingleQuote(name);
+      expect(quoted.slice(1, -1)).toBe(name.replaceAll("'", String.raw`'\''`));
+    });
+  }
+
+  it("閉じていない引用符を作らない（' の数が必ず偶数になる）", () => {
+    for (const [, name] of NASTY) {
+      const literal = sqlString(name);
+      // 絵文字を含むので spread ではなくマッチ数で数える（コードポイント分割を避ける）
+      expect((literal.match(/'/g) ?? []).length % 2).toBe(0);
+    }
   });
 });

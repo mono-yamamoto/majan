@@ -52,12 +52,44 @@ export function shellSingleQuote(value: string): string {
   return `'${value.replaceAll("'", String.raw`'\''`)}'`;
 }
 
-/** 未使用のうち一番小さい正の id。members の id は運営が手で振る */
-export function nextMemberId(usedIds: number[]): number {
-  const used = new Set(usedIds);
-  let id = 1;
-  while (used.has(id)) id += 1;
-  return id;
+/**
+ * 提案する member_id。**穴は埋めず、既知の最大 + 1** にする。
+ *
+ * 画面が知っているのは `GET /api/leagues/:id` が返す名簿（= league_members を
+ * JOIN したもの）だけで、**名簿から外した人**（members には残る）や
+ * **別リーグにしかいない人**の id は見えない。
+ *
+ * 穴を埋める実装にすると、「外した直後に新しい人を足す」という**この画面の
+ * 主要な操作**でちょうど外した人の id を提案してしまい、
+ * `UNIQUE constraint failed: members.id` で落ちる（実測）。
+ * 単調増加にすれば、実運用では衝突がほぼ起きない。
+ *
+ * それでも衝突する可能性は残る（別リーグの id は見えないため）。
+ * そこは **`ON CONFLICT` で握りつぶさず、落ちるのが正しい**。
+ * 別人の id を上書きすると、その人の過去の半荘が新しい名前に付いてしまう。
+ */
+export function nextMemberId(knownIds: number[]): number {
+  return knownIds.length === 0 ? 1 : Math.max(...knownIds) + 1;
+}
+
+/**
+ * 名前から C0 制御文字（NUL・ESC・BEL など）と DEL を落とす。
+ *
+ * とくに **NUL が致命的**で、`--file` で流すと **SQL が NUL の位置で切れ、
+ * sqlite3 が黙って残りを捨てる**（エラーにならず、何も入らない）。
+ * 「実行したのに何も起きない」は、壊れた SQL を出すより気づきにくい。
+ *
+ * 落とす場所を「SQL を作るとき」ではなく「入力を受けるとき」にしているのは、
+ * **入力欄に見えているものと SQL の中身をずらさない**ため。
+ * 生成のときに黙って落とすと、画面は変更を表示しているのに SQL には
+ * 出ない／別物が出る、という食い違いが起きる。
+ * 制御文字は目に見えないので、落としても見た目は変わらない。
+ */
+export function sanitizeName(value: string): string {
+  // oxlint の no-control-regex を抑制する。制御文字を落とすのが目的なので、
+  // 正規表現に制御文字が出るのは意図どおり（外すと実際に警告が出ることを確認済み）
+  // eslint-disable-next-line no-control-regex
+  return value.replaceAll(/[\u0000-\u001F\u007F]/gu, "");
 }
 
 export type Change =
@@ -71,6 +103,10 @@ export type Change =
  *
  * SQL を先に組み立てず、いったん「何が変わったか」にするのは、画面が
  * 警告（開幕後の所属変更・半荘に出た人を外す）を出す判断に使うため。
+ *
+ * `current` に無い member_id は無視する。画面は開いた時点の名簿を保持していて、
+ * **裏で名簿が変わっても再取得までは初回のまま**なので、知らない id に対して
+ * SQL を出さない側に倒す（増えた人は再読み込みするまで画面に出ない）。
  */
 export function diffRoster(current: RosterRow[], edited: EditedRow[], added: NewRow[]): Change[] {
   const changes: Change[] = [];

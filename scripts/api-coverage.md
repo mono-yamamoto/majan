@@ -24,7 +24,16 @@
 
 ## 入力の種類 × 経路
 
-`—` は経路として存在しない組み合わせ。`N/A` は API 経由では到達できない（フォーム専用）。
+記号の意味:
+
+| 記号 | 意味                                                                                                    |
+| ---- | ------------------------------------------------------------------------------------------------------- |
+| ✅   | `verify-api.sh` に対応するケースがある（値はそのラベル）                                                |
+| 代表 | **同じ実装を通るので、片方を代表とする**（`validateGameInput` は POST / PATCH 共通、`readJson` も共通） |
+| —    | **経路として存在しない**組み合わせ（`POST` にしか無い操作など）                                         |
+| N/A  | **API 経由では到達できない**（手前の parse で 400 になる。フォーム側の経路はユニットテストが持つ）      |
+
+「代表」を `—` と書いていた箇所があったが、**PATCH でも同じ検証を通るので「存在しない」は嘘**だった。`413` / JSON 壊れで既に「共有の実装」と書いていたのに揃っていなかったので直した。
 
 ### 半荘の中身
 
@@ -46,17 +55,17 @@
 | コード                   | `POST`                              | `PATCH`                                  |
 | ------------------------ | ----------------------------------- | ---------------------------------------- |
 | `RESULT_COUNT`           | ✅ 3件のときのコードは RESULT_COUNT | ✅ PATCH で3件 → RESULT_COUNT            |
-| `DUPLICATE_MEMBER`       | ✅ 同じ人を2回 → DUPLICATE_MEMBER   | —                                        |
-| `MEMBER_ID_RANGE`        | ✅ memberId が 0 → MEMBER_ID_RANGE  | —                                        |
-| `NOT_IN_LEAGUE`          | ✅ リーグ未所属メンバー             | —                                        |
+| `DUPLICATE_MEMBER`       | ✅ 同じ人を2回 → DUPLICATE_MEMBER   | 代表（POST と同じ `validateGameInput`）  |
+| `MEMBER_ID_RANGE`        | ✅ memberId が 0 → MEMBER_ID_RANGE  | 代表（POST と同じ `validateGameInput`）  |
+| `NOT_IN_LEAGUE`          | ✅ リーグ未所属メンバー             | 代表（POST と同じ `validateGameInput`）  |
 | `TEAM_BALANCE`           | ✅ 2-2 でない                       | ✅ PATCH で 2-2 を崩す → TEAM_BALANCE    |
-| `RAW_SCORE_TOTAL`        | ✅ 素点合計が違う                   | —                                        |
-| `RAW_SCORE_UNIT`         | ✅ 100の倍数でない → RAW_SCORE_UNIT | —                                        |
+| `RAW_SCORE_TOTAL`        | ✅ 素点合計が違う                   | 代表（POST と同じ `validateGameInput`）  |
+| `RAW_SCORE_UNIT`         | ✅ 100の倍数でない → RAW_SCORE_UNIT | 代表（POST と同じ `validateGameInput`）  |
 | `RAW_SCORE_NOT_A_NUMBER` | **N/A**                             | **N/A**                                  |
 | `RAW_SCORE_RANGE`        | **N/A**                             | **N/A**                                  |
-| `INVALID_DATE`           | ✅ 日付が実在しない                 | —                                        |
+| `INVALID_DATE`           | ✅ 日付が実在しない                 | 代表（POST と同じ `validateGameInput`）  |
 | `TITLE_REQUIRED`         | ✅ 無し / 空文字 / 空白だけ         | ✅ null / 省略 / 空白だけ                |
-| `TITLE_TOO_LONG`         | ✅ title 61文字                     | —                                        |
+| `TITLE_TOO_LONG`         | ✅ title 61文字                     | 代表（POST と同じ `validateGameInput`）  |
 | `MIXED_SCORES`           | ✅ 素点が一部だけ                   | ✅ PATCH で素点を一部だけ → MIXED_SCORES |
 
 `RAW_SCORE_NOT_A_NUMBER` と `RAW_SCORE_RANGE` が **N/A** なのは、`parseGameInput` が
@@ -78,27 +87,31 @@
 
 ### レスポンスの形（フロントが依存している）
 
-| 形                                                  | 検査                                    |
-| --------------------------------------------------- | --------------------------------------- |
-| `{ leagues: [{id, name}] }` / id 降順               | ✅ GET /api/leagues の4件               |
-| `LeagueResponse.games[].results[]` が4件            | ✅ GET の各半荘が4人ぶんの結果を持つ    |
-| **予約が `rawScore: null` で返る**                  | ✅ GET で予約は rawScore が null で返る |
-| 削除済みが GET に出ない                             | ✅ 削除済みの id=1 が GET に含まれない  |
-| 400 が `{ errors: [...] }` / 形の不正が `{ error }` | ✅ 400 のボディ形状の5件                |
+| 形                                                  | 検査                                     |
+| --------------------------------------------------- | ---------------------------------------- |
+| `{ leagues: [{id, name}] }` / id 降順               | ✅ GET /api/leagues の4件                |
+| **リーグ0件なら `{ leagues: [] }` で 200**          | ✅ 0件なら { leagues: [] }               |
+| リーグ0件で `/api/leagues/1` は 404                 | ✅ リーグ0件で GET /api/leagues/1 は 404 |
+| `LeagueResponse.games[].results[]` が4件            | ✅ GET の各半荘が4人ぶんの結果を持つ     |
+| **予約が `rawScore: null` で返る**                  | ✅ GET で予約は rawScore が null で返る  |
+| 削除済みが GET に出ない                             | ✅ 削除済みの id=1 が GET に含まれない   |
+| 400 が `{ errors: [...] }` / 形の不正が `{ error }` | ✅ 400 のボディ形状の5件                 |
 
 `valueFromGame` は `rawScore === null` を「予約」と読む。ここが `0` や欠落に変わると
 **フォームが素点 0 の確定として開く**ので、形そのものを固定している。
 
 ### 認証・入口
 
-| 種類                           | 検査                                               |
-| ------------------------------ | -------------------------------------------------- |
-| パスコード無し / 誤り / 空文字 | ✅ POST ヘッダ無し・誤り・空文字                   |
-| GET はパスコード不要           | ✅ GET /api/leagues はパスコード不要               |
-| `WRITE_PASSCODE` 未設定 → 500  | ✅ 未設定 + ヘッダ無し/有り → 500                  |
-| ボディ 16KB 超 → 413           | ✅ ボディ 16KB 超（`readJson` は POST/PATCH 共有） |
-| JSON 壊れ → 400                | ✅ JSON 壊れ（同上）                               |
-| 存在しないリーグ / 半荘        | ✅ 存在しない leagueId / :id                       |
+| 種類                                                             | 検査                                                       |
+| ---------------------------------------------------------------- | ---------------------------------------------------------- |
+| パスコード無し / 誤り / 空文字                                   | ✅ POST ヘッダ無し・誤り・空文字                           |
+| GET はパスコード不要                                             | ✅ GET /api/leagues はパスコード不要                       |
+| `WRITE_PASSCODE` 未設定 → 500                                    | ✅ 未設定 + ヘッダ無し/有り → 500                          |
+| ボディ 16KB 超 → 413                                             | ✅ ボディ 16KB 超（`readJson` は POST/PATCH 共有）         |
+| JSON 壊れ → 400                                                  | ✅ JSON 壊れ（同上）                                       |
+| 存在しないリーグ / 半荘                                          | ✅ 存在しない leagueId / :id                               |
+| **`:id` の不正形**（`abc` / `-1` / `1.5` / `1e30` / `0` / 20桁） | ✅ :id=... の6件（`parseId` が 404 にする）                |
+| **PATCH の `leagueId` が DB と不一致 → 400**                     | ✅ leagueId が DB と不一致 → 400（ボディを信じない・D-14） |
 
 ### 初期データ（`db/seed.sql` / `db/roster.sql`）
 
@@ -113,6 +126,14 @@ API ではないが、運営が本番で流すファイルなので同じ扱い�
 | **チーム分けの変更が効く**        | ✅ チーム分けが置き換わる／流し直すと元に戻る |
 | 他の人を巻き込まない              | ✅ 他の人の所属は変わらない                   |
 | **`seed.sql` は二重投入で落ちる** | ✅ UNIQUE で落ちる／リーグは1件のまま         |
+
+### 運営メニュー（`/leagues/:id/admin`）
+
+**API を1つも増やしていない。** 表示は `fetchLeague` の結果だけで、SQL は画面が
+文字列を組み立てて見せるだけ（実行しない）。なので**この表に新しい行は増えない**。
+
+SQL の組み立て・エスケープ・差分は `src/features/admin/sql.test.ts` が持つ
+（実 D1 に流して往復一致することを確認した入力を、そのままテストに固定してある）。
 
 ### 検査していないと決めたもの
 

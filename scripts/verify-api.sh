@@ -97,11 +97,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# 空のスキーマだけを作る。初期データを入れないのは、
+# 「リーグが1件も無いとき」をワーカー越しに1回だけ見るため（seed_db より前）。
 reset_db() {
   rm -rf "$PERSIST"; mkdir -p "$PERSIST"
   W d1 migrations apply majan --local --persist-to "$PERSIST" >/dev/null 2>&1
-  # 初期データは2ファイル構成。seed.sql（リーグとチーム・一発勝負）→
-  # roster.sql（名簿と所属・何度でも流せる）の順に流す。
+}
+
+# 初期データは2ファイル構成。seed.sql（リーグとチーム・一発勝負）→
+# roster.sql（名簿と所属・何度でも流せる）の順に流す。
+seed_db() {
   W d1 execute majan --local --persist-to "$PERSIST" --file=./db/seed.sql >/dev/null 2>&1
   W d1 execute majan --local --persist-to "$PERSIST" --file=./db/roster.sql >/dev/null 2>&1
 }
@@ -176,6 +181,15 @@ reset_db
 bun run build >/dev/null 2>&1
 start_worker with-secret
 
+echo "===== リーグが1件も無いとき（トップの初期状態） ====="
+# LeagueIndex はこの形をそのまま「まだリーグがありません」に使う。
+# 404 や null に変わるとトップが壊れるので、空配列で 200 を固定する。
+t 200 'リーグ0件でも GET /api/leagues は 200' "${BASE}/api/leagues"
+shape "0件なら { leagues: [] }" "True" 'd == {"leagues": []}' "${BASE}/api/leagues"
+t 404 'リーグ0件で GET /api/leagues/1 は 404' "${BASE}/api/leagues/1"
+seed_db
+
+echo
 echo "===== 初期データ: roster.sql は何度でも流せる（開幕前にチーム分けを直せること） ====="
 check "seed + roster でメンバー10人"   "$(Q "SELECT COUNT(*) AS n FROM members;")" "10"
 check "所属も10行"                     "$(Q "SELECT COUNT(*) AS n FROM league_members;")" "10"

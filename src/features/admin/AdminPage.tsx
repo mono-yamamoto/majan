@@ -29,6 +29,7 @@ import {
   confirmQuery,
   diffRoster,
   nextMemberId,
+  sanitizeName,
   type EditedRow,
   type NewRow,
   type RosterRow,
@@ -93,7 +94,8 @@ function AdminBody() {
   const setRow = (memberId: number, patch: Partial<EditedRow>) =>
     setEdited((rows) => rows.map((r) => (r.memberId === memberId ? { ...r, ...patch } : r)));
 
-  const usedIds = useMemo(
+  // 「画面が知っている id」。名簿から外した人や別リーグの人は含まれない
+  const knownIds = useMemo(
     () => [...members.map((m) => m.id), ...added.map((a) => a.memberId)],
     [members, added],
   );
@@ -146,7 +148,7 @@ function AdminBody() {
                 </span>
                 <Input
                   value={row.name}
-                  onChange={(e) => setRow(row.memberId, { name: e.target.value })}
+                  onChange={(e) => setRow(row.memberId, { name: sanitizeName(e.target.value) })}
                   aria-label={`#${row.memberId} の名前`}
                   className="min-w-0 flex-1"
                 />
@@ -194,7 +196,9 @@ function AdminBody() {
               value={row.name}
               onChange={(e) =>
                 setAdded((rows) =>
-                  rows.map((r, i) => (i === index ? { ...r, name: e.target.value } : r)),
+                  rows.map((r, i) =>
+                    i === index ? { ...r, name: sanitizeName(e.target.value) } : r,
+                  ),
                 )
               }
               placeholder="名前"
@@ -237,12 +241,22 @@ function AdminBody() {
         onClick={() =>
           setAdded((rows) => [
             ...rows,
-            { memberId: nextMemberId(usedIds), name: "", teamId: teams[0]?.id ?? 1 },
+            { memberId: nextMemberId(knownIds), name: "", teamId: teams[0]?.id ?? 1 },
           ])
         }
       >
-        + 追加する（id は空いている番号を使います）
+        + 追加する
       </Button>
+      {added.length > 0 ? (
+        // 画面から見えるのは「いまリーグに所属している人」だけ。名簿から外した人や
+        // 別リーグにしかいない人の id は分からないので、提案が当たらないことがある
+        <p className="text-muted-foreground mt-2 text-xs">
+          id は分かっている中で一番大きい番号の次を提案しています。流したときに{" "}
+          <code>UNIQUE constraint failed: members.id</code> が出たら、その id は
+          別の人が使っています。SQL の id を空いている番号に変えて流し直してください。
+          <strong>失敗した場合は1行も書き込まれていない</strong>ので、DB は壊れていません。
+        </p>
+      ) : null}
 
       <h3 className="mt-6 font-bold">変更後の人数</h3>
       <ul className="mt-2 text-sm">
