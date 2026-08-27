@@ -67,7 +67,7 @@ bun run dev          # ターミナル2: Vite の dev server（HMR が効く）
 本番に一番近い。
 
 ```bash
-bun run preview      # vp build && wrangler dev
+bun run preview      # vp build && npx wrangler dev
 ```
 
 ## テストと検証
@@ -76,7 +76,7 @@ bun run preview      # vp build && wrangler dev
 bash scripts/check-strict.sh   # 整形・lint・型。警告があっても失敗する
 bun run test                   # ユニットテスト
 bun run build
-bash scripts/verify-api.sh     # wrangler dev を立てて実 HTTP で API を叩く
+bash scripts/verify-api.sh     # npx wrangler dev を立てて実 HTTP で API を叩く
 ```
 
 `scripts/verify-api.sh` はローカル D1 を専用の `--persist-to` に作って使い、本番には
@@ -92,7 +92,7 @@ CI（`.github/workflows/ci.yml`）は push と PR でこの4つを順に走ら�
 自動デプロイは入れていない。手元から実行する。
 
 ```bash
-bun run deploy   # vp build && wrangler deploy
+bun run deploy   # vp build && npx wrangler deploy
 ```
 
 DB のマイグレーションは別で、`wrangler d1 migrations apply majan --remote`。

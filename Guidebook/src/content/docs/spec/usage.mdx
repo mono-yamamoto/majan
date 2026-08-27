@@ -5,6 +5,19 @@ description: リーグ立ち上げから日々の入力・戦績確認までの�
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
+<Aside type="tip" title="コマンドは `npx wrangler`（`wrangler` 単体では動かない）">
+`wrangler` は**グローバルには入れていない**。`package.json` の `devDependencies` にあるので、**`npx wrangler ...`**（または `bunx wrangler ...`）で呼ぶ。
+
+```
+$ wrangler d1 export ...
+zsh: command not found: wrangler   ← これが出たら npx を付け忘れている
+```
+
+**グローバルに入れない理由**: 版がずれると、手元と CI と本番で違う wrangler が動く。`devDependencies` に固定しておけば、`bun install` した全員が同じ版を使う。
+
+**実行はリポジトリのルート（`majan/`）で。** `wrangler.jsonc` を見つけられないと、どのデータベースの話か分からなくなる。
+</Aside>
+
 ## 登場人物
 
 | 役割 | やること | 使うもの |
@@ -25,14 +38,14 @@ D1 の作成（`wrangler d1 create majan --location apac`）は済んでいる�
 1. **本番DBにテーブルを作る**
 
    ```bash
-   wrangler d1 migrations apply majan --remote
+   npx wrangler d1 migrations apply majan --remote
    ```
    `num_tables` が 0 から増えることを `wrangler d1 info majan` で確認する。
 
 2. **制約が効いていることを1回だけ確かめる**
 
    ```bash
-   wrangler d1 execute majan --remote --command \
+   npx wrangler d1 execute majan --remote --command \
      "INSERT INTO games (league_id, played_on) VALUES (1, '2026-02-30');"
    ```
    **`CHECK constraint failed` で失敗すれば正常**（2月30日は存在しないので弾かれる）。成功してしまったら制約が効いていないので調査する。
@@ -42,7 +55,7 @@ D1 の作成（`wrangler d1 create majan --location apac`）は済んでいる�
    あわせて、**「何を入れても落ちるだけ」ではない**ことも確かめる。
 
    ```bash
-   wrangler d1 execute majan --remote --command \
+   npx wrangler d1 execute majan --remote --command \
      "INSERT INTO games (league_id, played_on) VALUES (1, '2026-02-28');"
    ```
    こちらは **`FOREIGN KEY constraint failed`**（まだリーグが無いため）。**エラーの種類が違う**ので、前者が「日付が理由で落ちた」と言い切れる。どちらも1行も書き込まれない。
@@ -50,14 +63,14 @@ D1 の作成（`wrangler d1 create majan --location apac`）は済んでいる�
 3. **リーグ・チーム・メンバーを登録する**（→ 下の「リーグ立ち上げ」）
 
    ```bash
-   wrangler d1 execute majan --remote --file=./db/seed.local.sql     # 1回だけ
-   wrangler d1 execute majan --remote --file=./db/roster.local.sql   # 開幕前なら何度でも
+   npx wrangler d1 execute majan --remote --file=./db/seed.local.sql     # 1回だけ
+   npx wrangler d1 execute majan --remote --file=./db/roster.local.sql   # 開幕前なら何度でも
    ```
 
 4. **書き込みパスコードを設定する**
 
    ```bash
-   wrangler secret put WRITE_PASSCODE
+   npx wrangler secret put WRITE_PASSCODE
    ```
    プロンプトに入力する。**設定しないと書き込みAPIが 500 を返す**（→ [アクセス制御](/spec/data-model/#アクセス制御旧-rls)）。
 
@@ -65,7 +78,7 @@ D1 の作成（`wrangler d1 create majan --location apac`）は済んでいる�
 
    ```bash
    bun run build
-   wrangler deploy
+   npx wrangler deploy
    ```
    出力される `https://majan.<サブドメイン>.workers.dev` がアプリのURL。
 
@@ -115,26 +128,26 @@ D1 の作成（`wrangler d1 create majan --location apac`）は済んでいる�
 2. **テーブルを作る**（初回のみ）
 
    ```bash
-   wrangler d1 migrations apply majan --remote
+   npx wrangler d1 migrations apply majan --remote
    ```
 
 3. **リーグとチームを作る**（初回のみ）
 
    ```bash
-   wrangler d1 execute majan --remote --file=./db/seed.local.sql
+   npx wrangler d1 execute majan --remote --file=./db/seed.local.sql
    ```
 
 4. **メンバーと所属を投入する**（開幕前なら何度でも）
 
    ```bash
-   wrangler d1 execute majan --remote --file=./db/roster.local.sql
+   npx wrangler d1 execute majan --remote --file=./db/roster.local.sql
    ```
    **チーム分けが決まっていなくても、仮で入れて後から直せる。**
 
 5. **確認**
 
    ```bash
-   wrangler d1 execute majan --remote --command \
+   npx wrangler d1 execute majan --remote --command \
      "SELECT t.name, COUNT(*) AS n, SUM(t.league_id <> lm.league_id) AS wrong_league \
       FROM league_members lm JOIN teams t ON t.id = lm.team_id GROUP BY t.id;"
    ```
@@ -225,7 +238,7 @@ sequenceDiagram
 やり直すなら全部消す。
 
 ```bash
-wrangler d1 execute majan --local --command \
+npx wrangler d1 execute majan --local --command \
   "DELETE FROM game_results; DELETE FROM games; DELETE FROM league_members; DELETE FROM teams; DELETE FROM members; DELETE FROM leagues;"
 ```
 
@@ -233,8 +246,8 @@ wrangler d1 execute majan --local --command \
 
 ```bash
 rm -rf .wrangler/state/v3/d1
-wrangler d1 migrations apply majan --local
-wrangler d1 execute majan --local --file=./db/seed.local.sql
+npx wrangler d1 migrations apply majan --local
+npx wrangler d1 execute majan --local --file=./db/seed.local.sql
 ```
 </Aside>
 
@@ -295,7 +308,7 @@ ORDER BY t.id, m.id;
   </TabItem>
   <TabItem label="コマンド">
 ```bash
-wrangler d1 execute majan --remote --command "<SQL>"
+npx wrangler d1 execute majan --remote --command "<SQL>"
 ```
 複数文を `;` で区切って一度に流せる。
   </TabItem>
@@ -390,7 +403,7 @@ WHERE lm.league_id = 1 GROUP BY t.id;
 ### 1. バックアップを取る（必須）
 
 ```bash
-wrangler d1 export majan --remote --output=majan-before-reset.sql
+npx wrangler d1 export majan --remote --output=majan-before-reset.sql
 ```
 **成功して、ファイルに中身があることを目で見る**こと。
 
@@ -408,7 +421,7 @@ grep -c "INSERT INTO" majan-before-reset.sql
 ### 2. 消す前の件数を見る
 
 ```bash
-wrangler d1 execute majan --remote --command "SELECT (SELECT COUNT(*) FROM games) AS games, (SELECT COUNT(*) FROM game_results) AS results, (SELECT COUNT(*) FROM members) AS members;"
+npx wrangler d1 execute majan --remote --command "SELECT (SELECT COUNT(*) FROM games) AS games, (SELECT COUNT(*) FROM game_results) AS results, (SELECT COUNT(*) FROM members) AS members;"
 ```
 
 **`games` の件数は、アプリの半荘一覧より多いことがある。** 一覧に出ないのは `deleted_at` が入った行（アプリから削除したもの）で、**行そのものは残っている**。リセットではそれも消える。
@@ -416,7 +429,7 @@ wrangler d1 execute majan --remote --command "SELECT (SELECT COUNT(*) FROM games
 ### 3. 消す
 
 ```bash
-wrangler d1 execute majan --remote --file=db/reset-games.sql
+npx wrangler d1 execute majan --remote --file=db/reset-games.sql
 ```
 
 中身は2行だけ。
@@ -431,7 +444,7 @@ DELETE FROM games;
 ### 4. 確かめる
 
 ```bash
-wrangler d1 execute majan --remote --command "SELECT (SELECT COUNT(*) FROM games) AS games, (SELECT COUNT(*) FROM game_results) AS results, (SELECT COUNT(*) FROM members) AS members, (SELECT COUNT(*) FROM league_members) AS roster, (SELECT name FROM leagues WHERE id = 1) AS league;"
+npx wrangler d1 execute majan --remote --command "SELECT (SELECT COUNT(*) FROM games) AS games, (SELECT COUNT(*) FROM game_results) AS results, (SELECT COUNT(*) FROM members) AS members, (SELECT COUNT(*) FROM league_members) AS roster, (SELECT name FROM leagues WHERE id = 1) AS league;"
 ```
 
 | 見るもの | 期待 |
@@ -467,7 +480,7 @@ wrangler d1 execute majan --remote --command "SELECT (SELECT COUNT(*) FROM games
 - 消しすぎたら運営がDBで戻せる
 
 ```bash
-wrangler d1 execute majan --remote --command "UPDATE games SET deleted_at = NULL WHERE id = 42;"
+npx wrangler d1 execute majan --remote --command "UPDATE games SET deleted_at = NULL WHERE id = 42;"
 ```
 
 ## バックアップ（運営・ほぼ自動）
@@ -476,18 +489,18 @@ wrangler d1 execute majan --remote --command "UPDATE games SET deleted_at = NULL
 
 ```bash
 # 手元にSQLダンプを落とす（月1目安）
-wrangler d1 export majan --remote --output=./backups/majan-2026-08-26.sql
+npx wrangler d1 export majan --remote --output=./backups/majan-2026-08-26.sql
 ```
 
 リストアは2段構え。
 
 ```bash
 # 直近7日以内 → Time Travel で巻き戻す
-wrangler d1 time-travel info majan
-wrangler d1 time-travel restore majan --timestamp=2026-08-25T13:00:00Z
+npx wrangler d1 time-travel info majan
+npx wrangler d1 time-travel restore majan --timestamp=2026-08-25T13:00:00Z
 
 # それより古い → export しておいたSQLを流し直す
-wrangler d1 execute majan --remote --file=./backups/majan-2026-08-26.sql
+npx wrangler d1 execute majan --remote --file=./backups/majan-2026-08-26.sql
 ```
 
 <Aside type="note" title="ダンプはローカル再現にも使える">
@@ -499,7 +512,7 @@ wrangler d1 execute majan --remote --file=./backups/majan-2026-08-26.sql
 - ウマ・オカなど換算値 → 運営が `leagues` の設定値を更新するだけ。**過去分も自動で再計算**される
 
 ```bash
-wrangler d1 execute majan --remote --command "UPDATE leagues SET uma_1st = 20, uma_4th = -20 WHERE id = 1;"
+npx wrangler d1 execute majan --remote --command "UPDATE leagues SET uma_1st = 20, uma_4th = -20 WHERE id = 1;"
 ```
 
 - 対局ルールの文言 → **`src/features/rules/RulesPage.tsx`** を編集して push（再デプロイ）。Markdown は使わない（決定#10）
@@ -507,7 +520,7 @@ wrangler d1 execute majan --remote --command "UPDATE leagues SET uma_1st = 20, u
 ## パスコードを変えたいとき
 
 ```bash
-wrangler secret put WRITE_PASSCODE   # プロンプトで新しい値を入力。新バージョンが即デプロイされて反映
+npx wrangler secret put WRITE_PASSCODE   # プロンプトで新しい値を入力。新バージョンが即デプロイされて反映
 ```
 
 入力係の端末では次の書き込み時に 401 が返るので、新しいパスコードを入れ直してもらう。
@@ -527,7 +540,7 @@ DBはこれを止められない（`game_results` に `league_id` が無いの�
 すでに消してしまった場合は、行を戻せば直る。
 
 ```bash
-wrangler d1 execute majan --remote --command \
+npx wrangler d1 execute majan --remote --command \
   "INSERT INTO league_members (league_id, member_id, team_id) VALUES (1, 5, 1);"
 ```
 </Aside>

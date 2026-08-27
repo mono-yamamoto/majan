@@ -11,14 +11,14 @@ import { FileTree } from '@astrojs/starlight/components';
 ```mermaid
 flowchart LR
   Dev[開発者] -->|git push| GH[GitHub]
-  GH -->|GitHub Actions<br/>wrangler deploy| W
+  GH -->|GitHub Actions<br/>npx wrangler deploy| W
   subgraph CF["Cloudflare（サーバーレス）"]
     W[Hono on Workers<br/>API + SPA静的配信]
     D1[("D1: majan<br/>マネージドSQLite")]
     W <--> D1
   end
   User[メンバーのスマホ] -->|HTTPS| W
-  Dev -->|wrangler d1<br/>migrations / execute / export| D1
+  Dev -->|npx wrangler d1<br/>migrations / execute / export| D1
 ```
 
 ## 採用技術
@@ -46,7 +46,7 @@ flowchart LR
 `wrangler d1 create` には `--location` でプライマリロケーションのヒントを渡せる。**メンバー全員が日本にいるので `apac`（Asia Pacific）を指定する。**
 
 ```bash
-wrangler d1 create majan --location apac
+npx wrangler d1 create majan --location apac
 ```
 
 D1 は書き込みを必ずプライマリで処理する（読み取りレプリカを有効にしない限り読み取りも同様）。指定しないと「作成時にコマンドを叩いた場所」から推測されるので、日本から叩けば結果的に `apac` になることが多いが、**推測に任せず明示する**。
@@ -81,7 +81,7 @@ import { Hono } from 'hono';
 
 type Bindings = {
   DB: D1Database;          // wrangler.jsonc の d1_databases で注入される
-  WRITE_PASSCODE: string;  // wrangler secret put で登録
+  WRITE_PASSCODE: string;  // npx wrangler secret put で登録
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -120,7 +120,7 @@ export default app;
     - routes/
       - leagues.ts GET リーグ・メンバー・全半荘
       - games.ts POST / PATCH / 論理削除
-  - migrations/ 0001_init.sql, 0002_....sql（wrangler d1 migrations が参照）
+  - migrations/ 0001_init.sql, 0002_....sql（npx wrangler d1 migrations が参照）
   - db/
     - seed.sql リーグとチーム（一発勝負・二重投入で落ちる）
     - roster.sql メンバーと所属（何度でも流せる）
@@ -150,7 +150,7 @@ DBの接続情報は環境変数ではなく**バインディング**。`wrangle
     {
       "binding": "DB",
       "database_name": "majan",
-      "database_id": "<wrangler d1 create majan で発行されたID>"
+      "database_id": "<npx wrangler d1 create majan で発行されたID>"
     }
   ]
 }

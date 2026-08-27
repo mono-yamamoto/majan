@@ -388,9 +388,9 @@ if (c.req.header('X-Passcode') !== c.env.WRITE_PASSCODE) { ... }
 - 初期データ（メンバー10人・リーグ・チーム・所属）は **`db/seed.local.sql`**。`db/seed.sql` はプレースホルダ名のテンプレートで、**実名を書かずにコミットする**（→ [使い方](/spec/usage/#リーグ立ち上げ運営シーズン開始時)）
 
 ```bash
-wrangler d1 migrations create majan init     # migrations/0001_init.sql の雛形が作られる
-wrangler d1 migrations apply majan --local   # ローカル（.wrangler/state/ 配下）に適用
-wrangler d1 migrations apply majan --remote  # 本番に適用
+npx wrangler d1 migrations create majan init     # migrations/0001_init.sql の雛形が作られる
+npx wrangler d1 migrations apply majan --local   # ローカル（.wrangler/state/ 配下）に適用
+npx wrangler d1 migrations apply majan --remote  # 本番に適用
 ```
 
 <Aside type="caution" title="SQLite の ALTER TABLE は弱い">
@@ -403,16 +403,16 @@ SQLite は `ALTER TABLE ... ADD COLUMN` と `RENAME` しかできない。**カ�
 
 ```bash
 # 復元可能な範囲を確認
-wrangler d1 time-travel info majan
+npx wrangler d1 time-travel info majan
 
 # 指定時刻の状態に巻き戻す
-wrangler d1 time-travel restore majan --timestamp=2026-08-25T13:00:00Z
+npx wrangler d1 time-travel restore majan --timestamp=2026-08-25T13:00:00Z
 ```
 
 7日より古い状態も残したい分は、定期的にSQLダンプを手元へ落とす。
 
 ```bash
-wrangler d1 export majan --remote --output=./backups/majan-2026-08-26.sql
+npx wrangler d1 export majan --remote --output=./backups/majan-2026-08-26.sql
 ```
 
 <Aside type="note" title="ダンプはただのSQLテキスト">
